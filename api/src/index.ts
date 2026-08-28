@@ -37,26 +37,52 @@ app.post('/parse', async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ ok: false, error: 'Missing text' });
 
-    // Find dollar amounts like "$25" or "$25 each" or "$25 each"
+    // If an OpenAI key is configured, prefer AI parsing for better accuracy
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const prompt = `Extract JSON with keys: proposition, stake (number or null), participants (array of names), resolution (oracle|attestation).\n\nText:\n${text}`;
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'system', content: 'You are a JSON extractor.' }, { role: 'user', content: prompt }],
+            temperature: 0,
+            max_tokens: 400,
+          }),
+        });
+        const data = await r.json();
+        const txt = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || '';
+        // attempt to extract JSON block
+        const jsonMatch = txt.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return res.json({ ok: true, parsed, ai: true });
+        }
+      } catch (aiErr) {
+        console.warn('AI parse failed, falling back to heuristic', aiErr);
+      }
+    }
+
+    // Heuristic fallback (existing simple parser)
     const moneyMatches = text.match(/\$\s*\d+(?:\.\d+)?/g) || [];
     const stake = moneyMatches.length ? moneyMatches[0].replace(/[^0-9.]/g, '') : null;
 
-    // Simple participant list detection: look for names after "I' ll bet" or "I will bet" or "I bet"
-    // and for names separated by "and"
     let participants: string[] = [];
     const participantsMatch = text.match(/bet\s+(?:[\w'\s]+?)\s+([A-Z][a-z]+(?:\s+and\s+[A-Z][a-z]+)*)/);
     if (participantsMatch && participantsMatch[1]) {
       participants = participantsMatch[1].split(/\s+and\s+/i).map(s => s.trim());
     }
 
-    // Proposition: text after 'that' or the whole text
     const thatIndex = text.toLowerCase().indexOf(' that ');
     const proposition = thatIndex >= 0 ? text.slice(thatIndex + 6).trim() : text.trim();
 
-    // resolution: if contains 'score' or team names maybe oracle; otherwise attestation
     const resolution = /score|scoreboard|final|final score|odds|market|price|election|weather/i.test(text) ? 'oracle' : 'attestation';
 
-    return res.json({ ok: true, parsed: { proposition, stake, participants, resolution } });
+    return res.json({ ok: true, parsed: { proposition, stake, participants, resolution }, ai: false });
   } catch (err: any) {
     console.error('parse error', err);
     return res.status(500).json({ ok: false, error: err.message || String(err) });

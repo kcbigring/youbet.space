@@ -1,18 +1,40 @@
-.vercel
-.env*
-# local env files
-.env.local
-.env.development
-.env.test
-.env.production
+# dependencies
+node_modules/
 
-# secret keys and credentials
+# builds
+dist/
+.next/
+out/
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
+# env files
+.env
+.env.*
+!.env.example
+
+# secrets, keys and credentials
+keys/
 *.key
 *.pem
+*.p8
+*_api_key*.json
+cdp_api_key*.json
 secrets.env
 private.key
 id_rsa
 id_rsa.pub
 
+# deploy targets
+.vercel
+
+# local deployment records
+deployments/*.json
+
 # macOS
 .DS_Store
+
+# logs
+*.log
+npm-debug.log*

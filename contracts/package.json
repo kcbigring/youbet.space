@@ -3,17 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "hardhat test"
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:base": "hardhat run scripts/deploy.js --network base_sepolia",
+    "deploy:robinhood": "hardhat run scripts/deploy.js --network robinhood_testnet"
   },
   "devDependencies": {
-    "hardhat": "^2.15.0",
-    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
-    "ethers": "^5.7.2"
-  },
-  "scripts": {
-    "compile": "npx hardhat compile",
-    "deploy:base": "npx hardhat run scripts/deploy.js --network base_testnet",
-    "deploy:robinhood": "npx hardhat run scripts/deploy.js --network robinhood_testnet",
-    "test": "npx hardhat test"
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.13.0",
+    "hardhat": "^2.22.0"
   }
 }
