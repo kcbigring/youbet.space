@@ -4,6 +4,7 @@ import { api, usd, ApiError } from "../../lib/api";
 import { useSession } from "../../lib/useSession";
 import type { Group, Wager, User, Reputation } from "../../lib/types";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
+import { ShareInvite } from "../../components/ShareInvite";
 import { WagerCard } from "../../components/WagerCard";
 
 interface GroupDetail extends Group {
@@ -20,8 +21,6 @@ export default function GroupPage() {
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [board, setBoard] = useState<LeaderboardRow[]>([]);
-  const [phone, setPhone] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"wagers" | "leaderboard" | "members">("wagers");
@@ -43,28 +42,6 @@ export default function GroupPage() {
   useEffect(() => {
     if (user) load();
   }, [user, load]);
-
-  async function sendInvite() {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await api.post<{ alreadyMember?: boolean; devCode?: string }>(`/groups/${id}/invites`, {
-        phone,
-      });
-      setNotice(
-        res.alreadyMember
-          ? "They are already in this group."
-          : `Invite sent${res.devCode ? ` — dev code ${res.devCode}` : ""}.`
-      );
-      setPhone("");
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not send that invite");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (loading || !user || !group) {
     return (
@@ -99,7 +76,6 @@ export default function GroupPage() {
       </div>
 
       <Banner>{error}</Banner>
-      {notice && <Banner kind="info">{notice}</Banner>}
 
       {tab === "wagers" && (
         <div style={{ marginTop: 12 }}>
@@ -145,16 +121,12 @@ export default function GroupPage() {
 
       {tab === "members" && (
         <div style={{ marginTop: 12 }}>
-          <div className="row" style={{ marginBottom: 16 }}>
-            <input
-              className="grow"
-              placeholder="(512) 555-1234"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+          <div style={{ marginBottom: 20 }}>
+            <ShareInvite
+              endpoint={`/groups/${group.id}/invites`}
+              label="Invite to this group"
+              shareTitle={group.name}
             />
-            <button className="subtle" onClick={sendInvite} disabled={busy || phone.length < 7}>
-              Invite
-            </button>
           </div>
 
           {group.members.map((member) => (

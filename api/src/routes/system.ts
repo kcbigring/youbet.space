@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "../prisma";
 import { env } from "../env";
 import { smsEnabled } from "../twilio";
+import { firebaseEnabled } from "../lib/firebase";
 import { asyncHandler, parseBody } from "../lib/http";
 import { requireAdmin } from "../lib/auth";
 import { contractAt, getProvider, getRelayer, isChainConfigured } from "../lib/chain";
@@ -40,7 +41,11 @@ router.get(
       ok: isChainConfigured(),
       detail: env.factoryAddress ? `factory ${env.factoryAddress}` : "FACTORY_ADDRESS not set",
     };
-    checks.sms = { ok: smsEnabled, detail: smsEnabled ? "twilio" : "simulated" };
+    // Invites are share links, so SMS is a convenience rather than a dependency.
+    checks.phoneVerification = {
+      ok: firebaseEnabled() || !env.requireVerifiedPhone,
+      detail: firebaseEnabled() ? "firebase" : "not configured (verification not required)",
+    };
 
     const ok = Object.values(checks).every((c) => c.ok);
     res.status(ok ? 200 : 503).json({ ok, chainId: env.chainId, checks });
@@ -101,6 +106,8 @@ router.get("/config", (_req, res) => {
       feeBps: 100,
     },
     smsEnabled,
+    phoneVerification: firebaseEnabled() ? "firebase" : null,
+    requireVerifiedPhone: env.requireVerifiedPhone,
   });
 });
 

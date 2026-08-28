@@ -9,7 +9,11 @@ jest.mock("../src/prisma", () => ({
     user: { count: jest.fn().mockResolvedValue(3) },
     group: { count: jest.fn().mockResolvedValue(1) },
     wager: { count: jest.fn().mockResolvedValue(2) },
-    invite: { create: jest.fn().mockResolvedValue({ id: "inv_1" }) },
+    invite: {
+      create: jest.fn().mockResolvedValue({ id: "inv_1" }),
+      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     session: { findUnique: jest.fn().mockResolvedValue(null) },
   },
 }));
@@ -81,6 +85,27 @@ describe("authentication", () => {
 
   it("rejects a malformed verification code", async () => {
     const res = await request(app).post("/auth/verify").send({ phone: "5125551234", code: "abc" });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("invite links", () => {
+  it("reports an unknown link rather than leaking whether it ever existed", async () => {
+    const res = await request(app).get("/auth/invite/doesnotexistdoesnotexist");
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not valid/i);
+  });
+
+  it("will not claim a link without a display name", async () => {
+    const res = await request(app)
+      .post("/auth/claim")
+      .send({ token: "sometokenthatislongenough" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid request body/i);
+  });
+
+  it("refuses a Firebase sign-in without a token", async () => {
+    const res = await request(app).post("/auth/firebase").send({});
     expect(res.status).toBe(400);
   });
 });

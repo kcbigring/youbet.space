@@ -33,8 +33,9 @@ export function createApp() {
       max: 120,
       standardHeaders: true,
       legacyHeaders: false,
-      // Health checks and scrapes should never be throttled.
-      skip: (req) => req.path === "/health" || req.path === "/metrics",
+      // Health checks and scrapes should never be throttled, and tests should
+      // not inherit a request budget from whatever ran before them.
+      skip: (req) => req.path === "/health" || req.path === "/metrics" || env.nodeEnv === "test",
     })
   );
 

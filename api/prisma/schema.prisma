@@ -46,7 +46,12 @@ model User {
   displayName   String?
   handle        String?  @unique
   walletAddress String?  @unique
+  /// Signed in at least once. Says nothing about the phone being real.
   verified      Boolean  @default(false)
+  /// Phone proven via Firebase. Required to fund a wager once
+  /// REQUIRE_VERIFIED_PHONE is on; irrelevant while playing with test funds.
+  phoneVerified Boolean  @default(false)
+  firebaseUid   String?  @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -89,8 +94,12 @@ model Session {
 /// One-time SMS codes for sign-in and for invitations into a group or wager.
 model Invite {
   id          String    @id @default(cuid())
-  phone       String
-  codeHash    String
+  /// Null for a link invite — the sender does not need the recipient's number.
+  phone       String?
+  codeHash    String?
+  /// URL-safe token behind /j/<token>. Possession is the credential: the
+  /// inviter vouched for the recipient by texting it to them personally.
+  linkToken   String?   @unique
   expiresAt   DateTime
   usedAt      DateTime?
   attempts    Int       @default(0)
@@ -103,6 +112,7 @@ model Invite {
   createdAt   DateTime  @default(now())
 
   @@index([phone, usedAt])
+  @@index([linkToken])
   @@index([groupId])
 }
 

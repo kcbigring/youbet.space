@@ -43,10 +43,11 @@ export async function createSession(userId: string) {
 /// the group or wager it was attached to.
 export async function consumeOtp(phone: string, code: string) {
   const invite = await prisma.invite.findFirst({
-    where: { phone, usedAt: null, expiresAt: { gt: new Date() } },
+    // codeHash is null on link invites, which are not redeemable with a code.
+    where: { phone, usedAt: null, codeHash: { not: null }, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
   });
-  if (!invite) return { ok: false as const, reason: "No pending code for this number" };
+  if (!invite || !invite.codeHash) return { ok: false as const, reason: "No pending code for this number" };
   if (invite.attempts >= MAX_OTP_ATTEMPTS) {
     return { ok: false as const, reason: "Too many attempts. Request a new code." };
   }
@@ -100,4 +101,47 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
     return next(unauthorized());
   }
   next();
+}
+
+/// Mints an invite that is delivered by the inviter, not by us. Possession of
+/// the link is the credential: a friend vouched for the recipient by sending it.
+export async function createInviteLink(opts: {
+  invitedById: string;
+  groupId?: string;
+  wagerId?: string;
+  phone?: string | null;
+  ttlHours?: number;
+}) {
+  const linkToken = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = new Date(Date.now() + (opts.ttlHours ?? 14 * 24) * 60 * 60 * 1000);
+
+  const invite = await prisma.invite.create({
+    data: {
+      linkToken,
+      expiresAt,
+      phone: opts.phone ?? null,
+      groupId: opts.groupId,
+      wagerId: opts.wagerId,
+      invitedById: opts.invitedById,
+    },
+  });
+
+  return { invite, linkToken, url: `${env.appUrl}/j/${linkToken}` };
+}
+
+/// Redeems a link invite. Unlike an OTP this proves nothing about the phone
+/// number — it proves the bearer was given the link by someone already inside.
+export async function consumeInviteLink(linkToken: string) {
+  const invite = await prisma.invite.findUnique({
+    where: { linkToken },
+    include: {
+      group: { select: { id: true, name: true } },
+      wager: { select: { id: true, proposition: true, stakeCents: true, sideLabels: true, status: true } },
+      invitedBy: { select: { id: true, displayName: true } },
+    },
+  });
+
+  if (!invite) return { ok: false as const, reason: "That invite link is not valid" };
+  if (invite.expiresAt < new Date()) return { ok: false as const, reason: "That invite link has expired" };
+  return { ok: true as const, invite };
 }

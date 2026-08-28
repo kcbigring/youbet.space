@@ -5,14 +5,7 @@ import { env } from "../env";
 import { sendSms } from "../twilio";
 import { asyncHandler, parseBody } from "../lib/http";
 import { badRequest, forbidden, notFound } from "../lib/errors";
-import {
-  authenticate,
-  generateOtp,
-  hashOtp,
-  normalizePhone,
-  otpExpiry,
-  type AuthedRequest,
-} from "../lib/auth";
+import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { reputationFor } from "../lib/reputation";
 
 const router = Router();
@@ -106,51 +99,46 @@ router.patch(
 );
 
 const inviteSchema = z.object({
-  phone: z.string().min(7),
+  // Optional: a link with no number attached works for the share sheet.
+  phone: z.string().min(7).optional(),
   name: z.string().trim().max(60).optional(),
 });
 
-/// Invites by SMS. The code doubles as the recipient's sign-in, so a new user
-/// goes from text message to group member in one step (execution plan §11).
+/// Mints a share link for the group. The inviter sends it themselves, so a
+/// non-user goes from their friend's text straight into the group — no shortcode,
+/// no carrier registration, and a far better first impression.
 router.post(
   "/:id/invites",
   asyncHandler(async (req: AuthedRequest, res) => {
     const membership = await membershipOrThrow(req.params.id, req.userId!);
     const body = parseBody(inviteSchema, req);
-    const phone = normalizePhone(body.phone);
-    if (!phone) throw badRequest("Enter a valid phone number, including country code");
 
-    const existing = await prisma.user.findUnique({ where: { phone } });
-    if (existing) {
-      const alreadyIn = await prisma.groupMember.findUnique({
-        where: { groupId_userId: { groupId: membership.groupId, userId: existing.id } },
-      });
-      if (alreadyIn) return res.json({ ok: true, alreadyMember: true });
+    const phone = body.phone ? normalizePhone(body.phone) : null;
+    if (body.phone && !phone) throw badRequest("Enter a valid phone number, including country code");
+
+    if (phone) {
+      const existing = await prisma.user.findUnique({ where: { phone } });
+      if (existing) {
+        const alreadyIn = await prisma.groupMember.findUnique({
+          where: { groupId_userId: { groupId: membership.groupId, userId: existing.id } },
+        });
+        if (alreadyIn) return res.json({ ok: true, alreadyMember: true });
+      }
     }
 
-    const code = generateOtp();
-    await prisma.invite.create({
-      data: {
-        phone,
-        codeHash: hashOtp(phone, code),
-        expiresAt: otpExpiry(),
-        groupId: membership.groupId,
-        invitedById: req.userId!,
-      },
+    const { url } = await createInviteLink({
+      invitedById: req.userId!,
+      groupId: membership.groupId,
+      phone,
     });
 
     const inviter = await prisma.user.findUnique({ where: { id: req.userId! } });
     const who = inviter?.displayName || "A friend";
-    const result = await sendSms(
-      phone,
-      `${who} added you to "${membership.group.name}" on youbet.space. Your code is ${code} — ${env.appUrl}/join`
-    );
+    const message = `${who} added you to "${membership.group.name}" on youbet.space — ${url}`;
 
-    res.status(201).json({
-      ok: true,
-      phone,
-      ...(result.simulated && !env.isProduction ? { devCode: code } : {}),
-    });
+    if (phone && env.sendInviteSms) await sendSms(phone, message);
+
+    res.status(201).json({ ok: true, phone, url, message });
   })
 );
 

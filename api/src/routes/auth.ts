@@ -8,6 +8,7 @@ import { asyncHandler, parseBody } from "../lib/http";
 import { badRequest, unauthorized } from "../lib/errors";
 import {
   authenticate,
+  consumeInviteLink,
   consumeOtp,
   createSession,
   generateOtp,
@@ -16,6 +17,7 @@ import {
   otpExpiry,
   type AuthedRequest,
 } from "../lib/auth";
+import { firebaseEnabled, verifyPhoneToken } from "../lib/firebase";
 
 const router = Router();
 
@@ -25,6 +27,9 @@ const otpLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  // Counts are shared across every route using this limiter, which would make
+  // tests depend on how many auth requests ran before them.
+  skip: () => env.nodeEnv === "test",
   message: { ok: false, error: "Too many verification requests. Try again shortly." },
 });
 
@@ -130,6 +135,7 @@ router.get(
       user: {
         id: user.id,
         phone: user.phone,
+        phoneVerified: user.phoneVerified,
         displayName: user.displayName,
         handle: user.handle,
         walletAddress: user.walletAddress,
@@ -162,6 +168,160 @@ router.post(
     const token = req.headers.authorization?.slice(7);
     if (token) await prisma.session.deleteMany({ where: { token } });
     res.json({ ok: true });
+  })
+);
+
+/// Applies whatever a redeemed invite pointed at, so someone arriving from a
+/// friend's text lands inside the group or wager rather than on an empty home.
+async function applyInvite(
+  userId: string,
+  invite: { groupId: string | null; wagerId: string | null }
+) {
+  if (invite.groupId) {
+    await prisma.groupMember.upsert({
+      where: { groupId_userId: { groupId: invite.groupId, userId } },
+      update: {},
+      create: { groupId: invite.groupId, userId },
+    });
+  }
+  if (invite.wagerId) {
+    await prisma.wagerParticipant.upsert({
+      where: { wagerId_userId: { wagerId: invite.wagerId, userId } },
+      update: {},
+      create: { wagerId: invite.wagerId, userId },
+    });
+  }
+}
+
+/// Preview an invite before signing in — the recipient should see what they were
+/// challenged to before being asked for anything.
+router.get(
+  "/invite/:token",
+  asyncHandler(async (req, res) => {
+    const result = await consumeInviteLink(req.params.token);
+    if (!result.ok) throw badRequest(result.reason);
+
+    const { invite } = result;
+    res.json({
+      ok: true,
+      invite: {
+        from: invite.invitedBy?.displayName ?? "A friend",
+        group: invite.group,
+        wager: invite.wager,
+        expiresAt: invite.expiresAt,
+      },
+    });
+  })
+);
+
+const claimSchema = z.object({
+  token: z.string().min(10),
+  displayName: z.string().trim().min(1).max(60),
+  phone: z.string().min(7).optional(),
+});
+
+/// Claim an invite link. This signs the bearer in without proving the phone
+/// number — the inviter vouched for them. Funding is gated separately on a
+/// Firebase-verified phone once REQUIRE_VERIFIED_PHONE is on.
+router.post(
+  "/claim",
+  otpLimiter,
+  asyncHandler(async (req, res) => {
+    const body = parseBody(claimSchema, req);
+    const result = await consumeInviteLink(body.token);
+    if (!result.ok) throw badRequest(result.reason);
+    const { invite } = result;
+
+    const phone = body.phone ? normalizePhone(body.phone) : null;
+    if (body.phone && !phone) throw badRequest("Enter a valid phone number, including country code");
+
+    // Match on phone when we have one so a returning user keeps their history.
+    const existing = phone ? await prisma.user.findUnique({ where: { phone } }) : null;
+    const user = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: { verified: true, displayName: existing.displayName ?? body.displayName },
+        })
+      : await prisma.user.create({
+          data: {
+            phone: phone ?? `pending:${invite.linkToken}`,
+            displayName: body.displayName,
+            verified: true,
+          },
+        });
+
+    await applyInvite(user.id, invite);
+    await prisma.invite.update({ where: { id: invite.id }, data: { usedAt: new Date() } });
+
+    const session = await createSession(user.id);
+    res.json({
+      ok: true,
+      token: session.token,
+      expiresAt: session.expiresAt,
+      user: { id: user.id, displayName: user.displayName, phoneVerified: user.phoneVerified },
+      landing: { groupId: invite.groupId, wagerId: invite.wagerId },
+    });
+  })
+);
+
+const firebaseSchema = z.object({
+  idToken: z.string().min(20),
+  displayName: z.string().trim().min(1).max(60).optional(),
+  inviteToken: z.string().min(10).optional(),
+});
+
+/// Sign in with a Firebase phone credential. Google proves the phone number, so
+/// there is no code for us to generate, store or rate-limit.
+router.post(
+  "/firebase",
+  otpLimiter,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    if (!firebaseEnabled()) throw badRequest("Phone verification is not configured");
+    const body = parseBody(firebaseSchema, req);
+    const { uid, phone } = await verifyPhoneToken(body.idToken);
+
+    // If this session already exists as a link-claimed user, upgrade that record
+    // rather than stranding their history under a placeholder phone.
+    const claimed = req.headers.authorization?.startsWith("Bearer ")
+      ? await prisma.session.findUnique({ where: { token: req.headers.authorization.slice(7) } })
+      : null;
+
+    const byPhone = await prisma.user.findUnique({ where: { phone } });
+    const target = byPhone ?? (claimed ? await prisma.user.findUnique({ where: { id: claimed.userId } }) : null);
+
+    const user = target
+      ? await prisma.user.update({
+          where: { id: target.id },
+          data: {
+            phone,
+            phoneVerified: true,
+            verified: true,
+            firebaseUid: uid,
+            ...(body.displayName && !target.displayName ? { displayName: body.displayName } : {}),
+          },
+        })
+      : await prisma.user.create({
+          data: { phone, phoneVerified: true, verified: true, firebaseUid: uid, displayName: body.displayName },
+        });
+
+    let landing: { groupId: string | null; wagerId: string | null } = { groupId: null, wagerId: null };
+    if (body.inviteToken) {
+      const invite = await consumeInviteLink(body.inviteToken);
+      if (invite.ok) {
+        await applyInvite(user.id, invite.invite);
+        await prisma.invite.update({ where: { id: invite.invite.id }, data: { usedAt: new Date() } });
+        landing = { groupId: invite.invite.groupId, wagerId: invite.invite.wagerId };
+      }
+    }
+
+    const session = await createSession(user.id);
+    res.json({
+      ok: true,
+      token: session.token,
+      expiresAt: session.expiresAt,
+      user: { id: user.id, phone: user.phone, displayName: user.displayName, phoneVerified: true },
+      landing,
+    });
   })
 );
 

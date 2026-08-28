@@ -1,6 +1,9 @@
 export interface User {
   id: string;
   displayName: string | null;
+  /// Phone proven via Identity Platform. Required to fund a wager once real
+  /// money is on; irrelevant while playing with test funds.
+  phoneVerified?: boolean;
   handle?: string | null;
   phone?: string;
   walletAddress?: string | null;

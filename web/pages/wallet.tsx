@@ -4,6 +4,13 @@ import { api, usd, setToken } from "../lib/api";
 import { useSession } from "../lib/useSession";
 import type { Reputation } from "../lib/types";
 import { Layout, Banner } from "../components/Layout";
+import { VerifyPhone } from "../components/VerifyPhone";
+
+interface Me {
+  id: string;
+  displayName: string | null;
+  phoneVerified?: boolean;
+}
 
 interface WalletInfo {
   wallet: { address: string; chainId: number; balanceEth: string; balanceCents: number | null };
@@ -142,6 +149,19 @@ export default function Wallet() {
                 {rep.pendingAttestations} wager{rep.pendingAttestations === 1 ? "" : "s"} waiting on your call.
               </p>
             )}
+          </div>
+        </>
+      )}
+
+      {user && !(user as Me).phoneVerified && (
+        <>
+          <h2>Verify your phone</h2>
+          <div className="card">
+            <p className="small muted" style={{ marginTop: 0 }}>
+              Not needed while the alpha runs on test funds. Verify now and you are
+              ready the day real money turns on.
+            </p>
+            <VerifyPhone onVerified={() => router.reload()} />
           </div>
         </>
       )}

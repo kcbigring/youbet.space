@@ -47,10 +47,21 @@ export const env = {
   maxPotCents: num(process.env.MAX_POT_CENTS, 50_000),
   monthlyLimitCents: num(process.env.MONTHLY_LIMIT_CENTS, 100_000),
 
-  // SMS
+  // Phone verification via Firebase. Google owns the carrier relationships, so
+  // there is no A2P 10DLC registration to wait on.
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+  firebaseServiceAccount: process.env.FIREBASE_SERVICE_ACCOUNT,
+  /// When on, a user must have a Firebase-verified phone before funding a wager.
+  /// Off for the test-token alpha; on before real money.
+  requireVerifiedPhone: process.env.REQUIRE_VERIFIED_PHONE === "true",
+
+  // SMS. Optional — invites are share links, so nothing depends on this.
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
   twilioFrom: process.env.TWILIO_FROM,
+  /// Off by default: invites are share links the inviter sends themselves, which
+  /// avoids app-to-person messaging and the carrier registration behind it.
+  sendInviteSms: process.env.SEND_INVITE_SMS === "true",
 
   // Natural-language wager parsing.
   openaiApiKey: process.env.OPENAI_API_KEY,

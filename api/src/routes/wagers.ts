@@ -5,14 +5,7 @@ import { env } from "../env";
 import { sendSms } from "../twilio";
 import { asyncHandler, parseBody } from "../lib/http";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
-import {
-  authenticate,
-  generateOtp,
-  hashOtp,
-  normalizePhone,
-  otpExpiry,
-  type AuthedRequest,
-} from "../lib/auth";
+import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { parseWager } from "../lib/parse";
 import { centsToWei, formatUsd, weiToCents } from "../lib/money";
 import { getFactory, getWager, hashTerms, isChainConfigured, readWagerState } from "../lib/chain";
@@ -315,6 +308,14 @@ router.post(
     const existing = wager.participants.find((p) => p.userId === userId);
     if (existing?.state === "JOINED") throw conflict("You have already joined this wager");
 
+    // Real money requires a proven phone. Off while the alpha runs on test funds.
+    if (env.requireVerifiedPhone) {
+      const me = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      if (!me.phoneVerified) {
+        throw forbidden("Verify your phone number before putting money on a wager");
+      }
+    }
+
     const monthlyLimit = env.monthlyLimitCents;
     const committed = await monthlyVolumeCents(userId);
     if (committed + wager.stakeCents > monthlyLimit) {
@@ -442,8 +443,10 @@ router.post(
   })
 );
 
-/// The challenge itself is the invitation — a non-user gets a text with the terms
-/// and a code that signs them in (execution plan §11).
+/// The challenge itself is the invitation. We mint a link and hand it back so
+/// the inviter sends it from their own phone — a text from a friend converts
+/// better than one from a shortcode, and it keeps us out of app-to-person
+/// messaging entirely (execution plan §11).
 async function inviteToWager(
   wagerId: string,
   inviterId: string,
@@ -453,34 +456,36 @@ async function inviteToWager(
 ) {
   const inviter = await prisma.user.findUnique({ where: { id: inviterId } });
   const who = inviter?.displayName || "A friend";
-  const invited: Array<{ phone: string; devCode?: string }> = [];
+  const invited: Array<{ phone: string | null; url: string; message: string }> = [];
 
-  for (const raw of phones) {
-    const phone = normalizePhone(raw);
-    if (!phone) continue;
+  // A wager invite can be addressed to a number or left open for anyone with
+  // the link, which is what the share sheet uses.
+  const targets = phones.length ? phones : [""];
 
-    const user = await prisma.user.upsert({
-      where: { phone },
-      update: {},
-      create: { phone, verified: false },
-    });
-    await prisma.wagerParticipant.upsert({
-      where: { wagerId_userId: { wagerId, userId: user.id } },
-      update: {},
-      create: { wagerId, userId: user.id, state: "INVITED" },
-    });
+  for (const raw of targets) {
+    const phone = raw ? normalizePhone(raw) : null;
+    if (raw && !phone) continue;
 
-    const code = generateOtp();
-    await prisma.invite.create({
-      data: { phone, codeHash: hashOtp(phone, code), expiresAt: otpExpiry(), wagerId, invitedById: inviterId },
-    });
+    if (phone) {
+      const user = await prisma.user.upsert({
+        where: { phone },
+        update: {},
+        create: { phone, verified: false },
+      });
+      await prisma.wagerParticipant.upsert({
+        where: { wagerId_userId: { wagerId, userId: user.id } },
+        update: {},
+        create: { wagerId, userId: user.id, state: "INVITED" },
+      });
+    }
 
-    const result = await sendSms(
-      phone,
-      `${who} bet you ${formatUsd(stakeCents)}: ${proposition}. Take the other side — code ${code} — ${env.appUrl}/w/${wagerId}`
-    );
+    const { url } = await createInviteLink({ invitedById: inviterId, wagerId, phone });
+    const message = `${who} bet you ${formatUsd(stakeCents)}: ${proposition}. Take the other side — ${url}`;
 
-    invited.push({ phone, ...(result.simulated && !env.isProduction ? { devCode: code } : {}) });
+    // Optional courtesy send; nothing depends on it and it is off by default.
+    if (phone && env.sendInviteSms) await sendSms(phone, message);
+
+    invited.push({ phone, url, message });
   }
 
   return invited;

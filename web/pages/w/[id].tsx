@@ -4,6 +4,7 @@ import { api, usd, timeUntil, ApiError } from "../../lib/api";
 import { useSession } from "../../lib/useSession";
 import type { Wager } from "../../lib/types";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
+import { ShareInvite } from "../../components/ShareInvite";
 
 interface Comment {
   id: string;
@@ -32,7 +33,6 @@ export default function WagerDetail() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState("");
-  const [invite, setInvite] = useState("");
 
   const load = useCallback(async () => {
     if (typeof id !== "string") return;
@@ -226,27 +226,15 @@ export default function WagerDetail() {
 
       {wager.status === "OPEN" && (
         <>
-          <h2>Invite more</h2>
-          <div className="row">
-            <input
-              className="grow"
-              placeholder="(512) 555-1234"
-              value={invite}
-              onChange={(e) => setInvite(e.target.value)}
-            />
-            <button
-              className="subtle"
-              disabled={busy || invite.length < 7}
-              onClick={() =>
-                act(async () => {
-                  await api.post(`/wagers/${wager.id}/invites`, { phones: [invite] });
-                  setInvite("");
-                })
-              }
-            >
-              Send
-            </button>
-          </div>
+          <h2>Bring someone in</h2>
+          <p className="small muted" style={{ marginTop: -4 }}>
+            Send this yourself — it lands as a text from you, not from us.
+          </p>
+          <ShareInvite
+            endpoint={`/wagers/${wager.id}/invites`}
+            label="Share this challenge"
+            shareTitle="I'll bet you"
+          />
         </>
       )}
 
