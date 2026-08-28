@@ -1,3 +1,7 @@
+// Off-chain record for youbet.space. The chain holds escrow, stakes, attestations
+// and settlement; Postgres holds identity, groups, social data and reputation.
+// The hash of the final wager terms is what links the two (Wager.termsHash).
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,36 +11,234 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model WagerFactory {
-  id        Int      @id @default(autoincrement())
-  address   String   @unique
-  deployer  String
-  stake     String
-  bond      String
-  createdAt DateTime @default(now())
+enum WagerStatus {
+  DRAFT // created off-chain, not yet deployed
+  OPEN // deployed, accepting participants
+  LOCKED // funded, terms immutable
+  SETTLED
+  REFUNDED
+  CANCELLED
 }
 
-model Wager {
-  id           Int      @id @default(autoincrement())
-  address      String   @unique
-  factory      String
-  stake        String
-  bond         String
-  createdAt    DateTime @default(now())
+enum ResolutionMethod {
+  ATTESTATION
+  ORACLE
+}
+
+enum GroupRole {
+  OWNER
+  MEMBER
+}
+
+enum ParticipantState {
+  INVITED
+  JOINED
+  DECLINED
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  phone     String   @unique
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  phone         String   @unique
+  email         String?  @unique
+  displayName   String?
+  handle        String?  @unique
+  walletAddress String?  @unique
+  verified      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  wallet         EmbeddedWallet?
+  sessions       Session[]
+  memberships    GroupMember[]
+  ownedGroups    Group[]            @relation("GroupOwner")
+  createdWagers  Wager[]            @relation("WagerCreator")
+  participations WagerParticipant[]
+  comments       Comment[]
+  notifications  Notification[]
+  invitesSent    Invite[]           @relation("InviteSender")
 }
 
-model Invite {
-  id        Int      @id @default(autoincrement())
-  phone     String
-  code      String
+/// Custodial signing key for a user's embedded wallet. The private key is stored
+/// encrypted with WALLET_ENCRYPTION_KEY and only ever decrypted in memory to sign a
+/// transaction, so participants never handle a seed phrase (execution plan §13).
+model EmbeddedWallet {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address      String   @unique
+  encryptedKey String
+  iv           String
+  authTag      String
+  createdAt    DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
-  used      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// One-time SMS codes for sign-in and for invitations into a group or wager.
+model Invite {
+  id          String    @id @default(cuid())
+  phone       String
+  codeHash    String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  attempts    Int       @default(0)
+  groupId     String?
+  group       Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  wagerId     String?
+  wager       Wager?    @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  invitedById String?
+  invitedBy   User?     @relation("InviteSender", fields: [invitedById], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([phone, usedAt])
+  @@index([groupId])
+}
+
+model Group {
+  id        String  @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User    @relation("GroupOwner", fields: [ownerId], references: [id])
+  /// Group id in the on-chain GroupRegistry, once mirrored.
+  onchainId Int?
+  imageUrl  String?
+
+  // Governance defaults applied to new wagers in this group.
+  maxStakeCents         Int              @default(10000) // $100 per person per wager
+  maxPotCents           Int              @default(50000) // $500 total pot
+  monthlyLimitCents     Int              @default(100000) // $1,000 per member per month
+  defaultBondCents      Int              @default(100) // $1 resolution bond
+  defaultResolution     ResolutionMethod @default(ATTESTATION)
+  /// Attestation threshold in basis points, read as "strictly more than".
+  defaultThresholdBps   Int              @default(5000)
+  /// Hours between the event ending and the attestation window closing.
+  resolutionWindowHours Int              @default(72)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members GroupMember[]
+  wagers  Wager[]
+  invites Invite[]
+}
+
+model GroupMember {
+  id       String    @id @default(cuid())
+  groupId  String
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model Wager {
+  id        String  @id @default(cuid())
+  groupId   String?
+  group     Group?  @relation(fields: [groupId], references: [id])
+  creatorId String
+  creator   User    @relation("WagerCreator", fields: [creatorId], references: [id])
+
+  proposition String
+  /// Label for each side, e.g. ["Texas wins", "Ohio State wins"].
+  sideLabels  String[]
+  category    String?
+
+  stakeCents    Int
+  bondCents     Int
+  feeBps        Int @default(100)
+  ownerSplitBps Int @default(0)
+
+  resolutionMethod ResolutionMethod @default(ATTESTATION)
+  thresholdBps     Int              @default(5000)
+  oracleSource     String?
+
+  fundingDeadline    DateTime
+  eventDeadline      DateTime
+  resolutionDeadline DateTime
+
+  status      WagerStatus @default(DRAFT)
+  winningSide Int?
+
+  // On-chain linkage.
+  address       String? @unique
+  termsHash     String?
+  txHash        String?
+  chainId       Int?
+  settledTxHash String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  settledAt DateTime?
+
+  participants WagerParticipant[]
+  comments     Comment[]
+  invites      Invite[]
+
+  @@index([groupId, status])
+  @@index([creatorId])
+}
+
+model WagerParticipant {
+  id      String @id @default(cuid())
+  wagerId String
+  wager   Wager  @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  side  Int?
+  state ParticipantState @default(INVITED)
+
+  fundedAt     DateTime?
+  fundedTxHash String?
+
+  // Resolution duty — mirrors the on-chain record so reputation can be queried cheaply.
+  attestedAt     DateTime?
+  attestedChoice Int?
+  conceded       Boolean   @default(false)
+
+  /// Net result in cents once the wager settles. Positive means winnings.
+  netCents Int?
+
+  invitedAt DateTime @default(now())
+
+  @@unique([wagerId, userId])
+  @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  wagerId   String
+  wager     Wager    @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([wagerId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  body      String
+  wagerId   String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
 }

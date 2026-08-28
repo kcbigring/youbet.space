@@ -1,25 +1,30 @@
-import dotenv from 'dotenv';
-import Twilio from 'twilio';
+import Twilio from "twilio";
+import { env } from "./env";
 
-dotenv.config();
+const client =
+  env.twilioAccountSid && env.twilioAuthToken ? Twilio(env.twilioAccountSid, env.twilioAuthToken) : null;
 
-const sid = process.env.TWILIO_ACCOUNT_SID;
-const token = process.env.TWILIO_AUTH_TOKEN;
-const from = process.env.TWILIO_FROM;
+export const smsEnabled = Boolean(client && env.twilioFrom);
 
-let client: Twilio.Twilio | null = null;
-if (sid && token) {
-  client = Twilio(sid, token);
-}
-
-export async function sendSms(phone: string, body: string) {
-  if (!client || !from) {
-    console.log(`Simulated SMS to ${phone}: ${body}`);
-    return { ok: true, simulated: true };
+/// Sends an SMS, or logs it in development so the invite flow is testable
+/// without Twilio credentials.
+export async function sendSms(to: string, body: string) {
+  if (!client || !env.twilioFrom) {
+    if (env.isProduction) {
+      console.error(`SMS to ${to} dropped: Twilio is not configured`);
+      return { ok: false as const, simulated: true };
+    }
+    console.log(`[sms:simulated] ${to} :: ${body}`);
+    return { ok: true as const, simulated: true };
   }
 
-  const msg = await client.messages.create({ body, from, to: phone });
-  return { ok: true, sid: msg.sid };
+  try {
+    const message = await client.messages.create({ body, from: env.twilioFrom, to });
+    return { ok: true as const, simulated: false, sid: message.sid };
+  } catch (error) {
+    console.error(`SMS to ${to} failed`, error);
+    return { ok: false as const, simulated: false };
+  }
 }
 
-export default { sendSms };
+export default { sendSms, smsEnabled };
