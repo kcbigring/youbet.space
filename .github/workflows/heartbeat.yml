@@ -1,48 +1,50 @@
 name: Heartbeat
 
+# Writes a short status beacon into HEARTBEAT.md. Hourly rather than every five
+# minutes: a scheduled commit is a commit, and 288 of them a day buries real work.
 on:
   schedule:
-    - cron: '*/5 * * * *' # every 5 minutes
+    - cron: '0 * * * *'
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   heartbeat:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Gather repo status
-        run: |
-          echo "LAST_COMMIT=$(git log -1 --pretty=format:'%h - %s (%an)')" >> $GITHUB_ENV
-          FILES=$(git --no-pager log -1 --name-only --pretty="")
-          # convert newlines to comma-separated list
-          echo "FILES_CHANGED=$(echo "$FILES" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
-
-      - name: Write heartbeat file
-        uses: actions/github-script@v7
         with:
-          script: |
-            const path = 'HEARTBEAT.md';
-            const content = `# Heartbeat
+          fetch-depth: 0
 
-Time: ${new Date().toISOString()}
+      - name: Write heartbeat
+        run: |
+          {
+            echo "# Heartbeat"
+            echo
+            echo "Updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "Last commit: $(git log -1 --pretty=format:'%h %s (%an, %ar)')"
+            echo
+            echo "## Recent activity"
+            echo
+            git log -5 --pretty=format:'- %h %s' | cat
+            echo
+            echo
+            echo "## Files touched in the last commit"
+            echo
+            git show --name-only --pretty="" HEAD | sed 's/^/- /'
+          } > HEARTBEAT.md
 
-Last commit: ${process.env.LAST_COMMIT}
-
-Files changed: ${process.env.FILES_CHANGED || 'none'}
-
-Current status: Run contract compile & tests blocked by local npm registry 403. API: `/invite` and `/verify` added; Twilio helper added. Frontend: invite UI + deploy/create forms present. Contracts: `Wager` and `WagerFactory` updated to support ownerSplitBps and bond redistribution.
-
-Next steps: try running tests in CI or fix npm registry locally; run full integration tests; deploy compiled artifacts when ready.
-`;
-
-            // try to get existing file to decide create vs update
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            try {
-              const existing = await github.rest.repos.getContent({ owner, repo, path });
-              const sha = existing.data.sha;
-              await github.rest.repos.createOrUpdateFileContents({ owner, repo, path, message: `heartbeat update ${new Date().toISOString()}`, content: Buffer.from(content).toString('base64'), sha, committer: { name: 'youbet-bot', email: 'youbet-bot@example.com' }, author: { name: 'youbet-bot', email: 'youbet-bot@example.com' } });
-            } catch (e) {
-              await github.rest.repos.createOrUpdateFileContents({ owner, repo, path, message: `heartbeat create ${new Date().toISOString()}`, content: Buffer.from(content).toString('base64'), committer: { name: 'youbet-bot', email: 'youbet-bot@example.com' }, author: { name: 'youbet-bot', email: 'youbet-bot@example.com' } });
-            }
+      - name: Commit if the beacon moved
+        run: |
+          if git diff --quiet HEARTBEAT.md; then
+            echo "No change; nothing to commit."
+            exit 0
+          fi
+          git config user.name "youbet-bot"
+          git config user.email "youbet-bot@users.noreply.github.com"
+          git add HEARTBEAT.md
+          git commit -m "chore: heartbeat $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
