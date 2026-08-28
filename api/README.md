@@ -85,3 +85,22 @@ To swap providers, `api/src/lib/parse.ts` is the only file that talks to a model
 Stake, pot and monthly volume limits (§9) are checked on create *and* on join,
 against the stricter of the protocol limit and the group's own. The monthly limit
 is per user and off-chain, since that is where user identity lives.
+
+## Tests
+
+```bash
+npm test
+```
+
+28 tests: natural-language parsing, dollar/wei conversion, phone and OTP
+handling, and the HTTP surface with Prisma stubbed.
+
+`tests/chain.integration.test.ts` additionally drives a full wager — create,
+join, attest, settle, withdraw — through the real ABIs. It needs a local node:
+
+```bash
+cd ../contracts && npx hardhat node    # in another terminal
+cd ../api && npm test
+```
+
+Without a node it warns and passes, so CI stays green.

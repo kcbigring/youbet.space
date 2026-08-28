@@ -27,7 +27,10 @@ let provider: ethers.JsonRpcProvider | null = null;
 
 export function getProvider(): ethers.JsonRpcProvider {
   if (!provider) {
-    provider = new ethers.JsonRpcProvider(env.rpcUrl, env.chainId);
+    // cacheTimeout: -1 disables ethers' short-lived RPC cache. The relayer sends
+    // transactions back to back when sponsoring gas, and a cached nonce makes the
+    // second one fail with NONCE_EXPIRED.
+    provider = new ethers.JsonRpcProvider(env.rpcUrl, env.chainId, { cacheTimeout: -1 });
   }
   return provider;
 }
