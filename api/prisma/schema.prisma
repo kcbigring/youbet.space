@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model WagerFactory {
+  id        Int      @id @default(autoincrement())
+  address   String   @unique
+  deployer  String
+  stake     String
+  bond      String
+  createdAt DateTime @default(now())
+}
+
+model Wager {
+  id           Int      @id @default(autoincrement())
+  address      String   @unique
+  factory      String
+  stake        String
+  bond         String
+  createdAt    DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  phone     String   @unique
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Invite {
+  id        Int      @id @default(autoincrement())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
