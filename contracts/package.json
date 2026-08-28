@@ -6,12 +6,10 @@
     "test": "hardhat test"
   },
   "devDependencies": {
-    "@nomiclabs/hardhat-ethers": "^3.0.0",
-    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
-    "ethers": "^5.7.2",
-    "hardhat": "^2.15.0"
-  }
-  ,
+    "hardhat": "^2.15.0",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "ethers": "^5.7.2"
+  },
   "scripts": {
     "compile": "npx hardhat compile",
     "deploy:base": "npx hardhat run scripts/deploy.js --network base_testnet",
