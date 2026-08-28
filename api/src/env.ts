@@ -1,9 +1,15 @@
 import dotenv from "dotenv";
 import path from "path";
 
-// Load the repo-root .env first, then any api-local override.
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+// Load in precedence order; dotenv does not overwrite what is already set, so
+// the first file to define a variable wins.
+//   1. api/.env            — service-local overrides
+//   2. <repo>/.env.local   — local secrets, gitignored (where Vercel CLI writes)
+//   3. <repo>/.env         — shared defaults
+const repoRoot = path.resolve(__dirname, "../..");
 dotenv.config();
+dotenv.config({ path: path.join(repoRoot, ".env.local") });
+dotenv.config({ path: path.join(repoRoot, ".env") });
 
 function num(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -21,6 +27,9 @@ export const env = {
 
   // Admin-only endpoints (contract deploys, resolver management).
   adminApiKey: process.env.API_KEY,
+  /// Secret mixed into one-time-code hashes. Kept separate from adminApiKey so
+  /// rotating the admin key does not invalidate every pending login code.
+  otpPepper: process.env.OTP_PEPPER || "youbet-dev-pepper",
 
   // Chain — Base is the primary network.
   chainId: num(process.env.CHAIN_ID, 84532),

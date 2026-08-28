@@ -11,6 +11,10 @@ import userRoutes from "./routes/users";
 import systemRoutes from "./routes/system";
 
 export function createApp() {
+  if (env.isProduction && !process.env.OTP_PEPPER) {
+    console.warn("OTP_PEPPER is not set — login codes are hashed with the default pepper.");
+  }
+
   const app = express();
 
   app.set("trust proxy", 1);

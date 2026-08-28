@@ -9,8 +9,9 @@
     "test": "jest --runInBand",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy",
-    "prisma:push": "prisma db push"
+    "prisma:migrate": "node scripts/prisma.js migrate deploy",
+    "prisma:push": "node scripts/prisma.js db push",
+    "prisma:studio": "node scripts/prisma.js studio"
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",

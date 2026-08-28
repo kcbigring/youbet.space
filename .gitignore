@@ -39,3 +39,4 @@ deployments/*.json
 # logs
 *.log
 npm-debug.log*
+.env*

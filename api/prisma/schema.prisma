@@ -8,6 +8,9 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // At runtime this is Neon's pooled endpoint. Migrations need the unpooled one:
+  // `npm run prisma:migrate` swaps in DIRECT_URL when it is set. Declaring
+  // directUrl here instead would make every Prisma command fail when it is not.
   url      = env("DATABASE_URL")
 }
 

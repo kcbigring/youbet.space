@@ -26,7 +26,7 @@ export const generateOtp = () => String(crypto.randomInt(0, 1_000_000)).padStart
 
 /// Codes are stored hashed so a database leak cannot be replayed as a login.
 export const hashOtp = (phone: string, code: string) =>
-  crypto.createHash("sha256").update(`${phone}:${code}:${env.adminApiKey || "youbet"}`).digest("hex");
+  crypto.createHash("sha256").update(`${phone}:${code}:${env.otpPepper}`).digest("hex");
 
 export function otpExpiry() {
   return new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);

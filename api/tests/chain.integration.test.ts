@@ -21,14 +21,29 @@ const provider = new ethers.JsonRpcProvider(RPC, 31337, { cacheTimeout: -1 });
 
 /// Availability is checked inside the test, not at collection time — a
 /// describe-time flag would always read its pre-beforeAll value and skip.
+///
+/// Uses a plain fetch with a hard timeout rather than the provider: ethers
+/// retries a dead endpoint with backoff, which hangs the run instead of skipping.
 async function nodeIsUp() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
   try {
-    await provider.getBlockNumber();
-    return true;
+    const res = await fetch(RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "eth_chainId", params: [], id: 1 }),
+      signal: controller.signal,
+    });
+    return res.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
+
+// Release the provider's polling handles so Jest can exit cleanly.
+afterAll(() => provider.destroy());
 
 async function deploy(name: string, signer: ethers.Wallet, args: unknown[] = []) {
   const { abi, bytecode } = artifact(name);
