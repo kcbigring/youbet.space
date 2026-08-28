@@ -1,2 +1,18 @@
 .vercel
 .env*
+# local env files
+.env.local
+.env.development
+.env.test
+.env.production
+
+# secret keys and credentials
+*.key
+*.pem
+secrets.env
+private.key
+id_rsa
+id_rsa.pub
+
+# macOS
+.DS_Store
