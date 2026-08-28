@@ -1,150 +1,119 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { api, usd } from "../lib/api";
+import { useSession } from "../lib/useSession";
+import type { Wager, Reputation } from "../lib/types";
+import { Layout, Empty, Banner } from "../components/Layout";
+import { WagerCard } from "../components/WagerCard";
+
+interface Feed {
+  pending: Wager[];
+  active: Wager[];
+  needsAttention: Wager[];
+  recent: Wager[];
+}
 
 export default function Home() {
-  const [text, setText] = useState("");
+  const { user, loading } = useSession();
+  const [feed, setFeed] = useState<Feed | null>(null);
+  const [rep, setRep] = useState<Reputation | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  return (
-    <main style={{ padding: 24, fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <h1>youbet.space — Create a friendly wager</h1>
-      <p>Natural-language input (TypeScript prototype):</p>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} cols={60} />
-      <div style={{ marginTop: 12 }}>
-        <button onClick={async () => {
-          const api = process.env.NEXT_PUBLIC_API_URL || '';
-          try {
-            const res = await fetch(`${api}/parse`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-            const json = await res.json();
-            if (json.ok) alert('Parsed: ' + JSON.stringify(json.parsed));
-            else alert('Parse error: ' + (json.error || 'unknown'));
-          } catch (e: any) {
-            alert('Exception: ' + String(e.message || e));
-          }
-        }}>Parse & Create</button>
-      </div>
-      <div style={{ marginTop: 24 }}>
-        <h2>Deploy Factory (test)</h2>
-        <DeployForm />
-      </div>
-      <div style={{ marginTop: 24 }}>
-        <h2>Invite via SMS</h2>
-        <InviteForm />
-      </div>
-    </main>
-  );
-}
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([api.get<Feed>("/wagers"), api.get<{ reputation: Reputation }>("/users/me/reputation")])
+      .then(([f, r]) => {
+        setFeed(f);
+        setRep(r.reputation);
+      })
+      .catch((err) => setError(err.message));
+  }, [user]);
 
-function DeployForm() {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-
-  async function handleDeploy() {
-    setLoading(true);
-    setResult(null);
-    try {
-      const api = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${api}/deploy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stake: '0.01', bond: '0.001' }) });
-      const json = await res.json();
-      if (json.ok) setResult(json.address);
-      else setResult('Error: ' + (json.error || 'unknown'));
-    } catch (e: any) {
-      setResult('Exception: ' + String(e.message || e));
-    } finally {
-      setLoading(false);
-    }
+  if (loading || !user) {
+    return (
+      <Layout>
+        <div className="stack">
+          <div className="skeleton" />
+          <div className="skeleton" />
+        </div>
+      </Layout>
+    );
   }
 
-  return (
-    <div>
-      <button onClick={handleDeploy} disabled={loading}>{loading ? 'Deploying…' : 'Deploy Factory'}</button>
-      {result && <div style={{ marginTop: 8 }}>Result: {result}</div>}
-    </div>
-  );
-}
-
-function CreateWagerForm() {
-  const [factory, setFactory] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-
-  async function handleCreate() {
-    setLoading(true);
-    setResult(null);
-    try {
-      const api = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${api}/factory/${factory}/create-wager`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stake: '0.01', bond: '0.001' }) });
-      const json = await res.json();
-      if (json.ok) setResult(json.wagerAddress || 'no address');
-      else setResult('Error: ' + (json.error || 'unknown'));
-    } catch (e: any) {
-      setResult('Exception: ' + String(e.message || e));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const empty =
+    feed && !feed.pending.length && !feed.active.length && !feed.needsAttention.length && !feed.recent.length;
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <input placeholder="Factory address" value={factory} onChange={(e) => setFactory(e.target.value)} style={{ width: 400 }} />
-      <button onClick={handleCreate} disabled={loading || !factory} style={{ marginLeft: 8 }}>{loading ? 'Creating…' : 'Create Wager'}</button>
-      {result && <div style={{ marginTop: 8 }}>Result: {result}</div>}
-    </div>
-  );
-}
-
-function InviteForm() {
-  const [phone, setPhone] = useState('');
-  const [stage, setStage] = useState<'input'|'code'|'done'>('input');
-  const [code, setCode] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-
-  async function sendInvite() {
-    setMessage(null);
-    try {
-      const api = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${api}/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
-      const json = await res.json();
-      if (json.ok) {
-        setStage('code');
-        setMessage('OTP sent (check SMS or console in dev)');
-      } else setMessage('Error: ' + (json.error || 'unknown'));
-    } catch (e: any) {
-      setMessage('Exception: ' + String(e.message || e));
-    }
-  }
-
-  async function verify() {
-    setMessage(null);
-    try {
-      const api = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${api}/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, code }) });
-      const json = await res.json();
-      if (json.ok) {
-        setStage('done');
-        setMessage('Verified — you can participate now');
-      } else setMessage('Error: ' + (json.error || 'unknown'));
-    } catch (e: any) {
-      setMessage('Exception: ' + String(e.message || e));
-    }
-  }
-
-  return (
-    <div>
-      {stage === 'input' && (
-        <div>
-          <input placeholder="+15555551234" value={phone} onChange={(e) => setPhone(e.target.value)} style={{ width: 240 }} />
-          <button onClick={sendInvite} style={{ marginLeft: 8 }}>Send OTP</button>
+    <Layout>
+      <h1>Hey{user.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}</h1>
+      {rep && (
+        <div className="stats" style={{ margin: "16px 0 4px" }}>
+          <div className="stat">
+            <b>
+              {rep.wins}-{rep.losses}
+            </b>
+            <span>Record</span>
+          </div>
+          <div className="stat">
+            <b className={rep.netCents >= 0 ? "pos" : "neg"}>
+              {rep.netCents >= 0 ? "+" : ""}
+              {usd(rep.netCents)}
+            </b>
+            <span>Net</span>
+          </div>
+          <div className="stat">
+            <b>{rep.attestationRate == null ? "—" : `${rep.attestationRate}%`}</b>
+            <span>Attestation</span>
+          </div>
         </div>
       )}
-      {stage === 'code' && (
-        <div style={{ marginTop: 8 }}>
-          <input placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} style={{ width: 160 }} />
-          <button onClick={verify} style={{ marginLeft: 8 }}>Verify</button>
-        </div>
+
+      <Banner>{error}</Banner>
+
+      {feed?.needsAttention.length ? (
+        <>
+          <h2>Waiting on you</h2>
+          {feed.needsAttention.map((w) => (
+            <WagerCard key={w.id} wager={w} userId={user.id} />
+          ))}
+        </>
+      ) : null}
+
+      {feed?.pending.length ? (
+        <>
+          <h2>Challenges for you</h2>
+          {feed.pending.map((w) => (
+            <WagerCard key={w.id} wager={w} userId={user.id} />
+          ))}
+        </>
+      ) : null}
+
+      {feed?.active.length ? (
+        <>
+          <h2>Active</h2>
+          {feed.active.map((w) => (
+            <WagerCard key={w.id} wager={w} userId={user.id} />
+          ))}
+        </>
+      ) : null}
+
+      {feed?.recent.length ? (
+        <>
+          <h2>Recent results</h2>
+          {feed.recent.map((w) => (
+            <WagerCard key={w.id} wager={w} userId={user.id} />
+          ))}
+        </>
+      ) : null}
+
+      {empty && (
+        <Empty>
+          <p style={{ marginTop: 0 }}>Nothing running yet.</p>
+          <Link href="/create">
+            <button>Start a challenge</button>
+          </Link>
+        </Empty>
       )}
-      {stage === 'done' && (
-        <div>Verified for {phone}</div>
-      )}
-      {message && <div style={{ marginTop: 8 }}>{message}</div>}
-    </div>
+    </Layout>
   );
 }
