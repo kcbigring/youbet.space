@@ -3,9 +3,9 @@
   <!-- Maskable variant: the mark sits inside the safe zone so a launcher can
        crop it to any shape without clipping the stem. -->
   <rect width="100" height="100" fill="#0b0d12" />
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="10" transform="translate(50 50) scale(0.62) translate(-50 -50)">
-    <path d="M26 24 L50 53" stroke="#4ade80" />
-    <path d="M74 24 L50 53" stroke="#1c7a4d" />
-    <path d="M50 53 L50 79" stroke="#4ade80" />
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="14" transform="translate(50 50) scale(0.62) translate(-50 -50)">
+    <path d="M27 26 L50 52" stroke="#4ade80" />
+    <path d="M73 26 L50 52" stroke="#1c7a4d" />
+    <path d="M50 52 L50 78" stroke="#4ade80" />
   </g>
 </svg>

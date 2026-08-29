@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "e2e": "playwright test",
-    "og": "node scripts/og.mjs"
+    "og": "node scripts/og.mjs",
+    "marks": "node scripts/marks.mjs"
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",

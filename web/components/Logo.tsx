@@ -11,10 +11,10 @@ export function LogoMark({ size = 22 }: { size?: number }) {
       focusable="false"
       style={{ display: "block", flexShrink: 0 }}
     >
-      <g fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="13">
-        <path d="M26 24 L50 53" stroke="var(--accent)" />
-        <path d="M74 24 L50 53" stroke="var(--accent-deep)" />
-        <path d="M50 53 L50 79" stroke="var(--accent)" />
+      <g fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="18">
+        <path d="M27 26 L50 52" stroke="var(--accent)" />
+        <path d="M73 26 L50 52" stroke="var(--accent-deep)" />
+        <path d="M50 52 L50 78" stroke="var(--accent)" />
       </g>
     </svg>
   );

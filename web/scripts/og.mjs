@@ -39,10 +39,10 @@ const html = `<!doctype html>
 <body>
   <div class="lockup">
     <svg width="46" height="46" viewBox="0 0 100 100">
-      <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="13">
-        <path d="M26 24 L50 53" stroke="#4ade80"/>
-        <path d="M74 24 L50 53" stroke="#1c7a4d"/>
-        <path d="M50 53 L50 79" stroke="#4ade80"/>
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="18">
+        <path d="M27 26 L50 52" stroke="#4ade80"/>
+        <path d="M73 26 L50 52" stroke="#1c7a4d"/>
+        <path d="M50 52 L50 78" stroke="#4ade80"/>
       </g>
     </svg>
     <div class="word">youbet<span>.space</span></div>
