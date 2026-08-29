@@ -43,10 +43,12 @@ describe("natural-language wager parsing", () => {
     expect(parseHeuristically("$5 that he shows up", now).eventDeadline).toBeNull();
   });
 
-  it("always produces two mutually exclusive sides", () => {
-    const parsed = parseHeuristically("$25 that Texas beats Ohio State", now);
-    expect(parsed.sideLabels).toHaveLength(2);
-    expect(parsed.sideLabels[0]).not.toBe(parsed.sideLabels[1]);
+  it("labels the sides without repeating the proposition", () => {
+    // The labels sit right under the proposition, so echoing it there reads as
+    // a bug. The old fallback produced "Not: will i use the peloton...".
+    const parsed = parseHeuristically("will i use the peloton in the next hour", now);
+    expect(parsed.sideLabels).toEqual(["Yes", "No"]);
+    expect(parsed.sideLabels.join(" ")).not.toMatch(/peloton|^Not:/i);
   });
 
   it("never invents a stake that was not stated", () => {

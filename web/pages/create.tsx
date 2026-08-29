@@ -35,7 +35,8 @@ export default function Create() {
   const [proposition, setProposition] = useState("");
   const [sideA, setSideA] = useState("");
   const [sideB, setSideB] = useState("");
-  const [stake, setStake] = useState("25");
+  const [stake, setStake] = useState("10");
+  const [maxStakeCents, setMaxStakeCents] = useState<number | null>(null);
   const [side, setSide] = useState(0);
   const [groupId, setGroupId] = useState("");
   const [deadline, setDeadline] = useState(toLocalInput(null));
@@ -45,6 +46,16 @@ export default function Create() {
   useEffect(() => {
     if (!user) return;
     api.get<{ groups: Group[] }>("/groups").then((res) => setGroups(res.groups)).catch(() => {});
+    // Offer a stake this account can actually place: standing caps a new
+    // member below the protocol limit until they have settled a few.
+    api
+      .get<{ standing: { limits: { maxStakeCents: number } } }>("/users/me/reputation")
+      .then((res) => {
+        const cap = res.standing.limits.maxStakeCents;
+        setMaxStakeCents(cap);
+        setStake(String(Math.min(10, cap / 100)));
+      })
+      .catch(() => {});
   }, [user]);
 
   async function handleParse() {
@@ -91,6 +102,7 @@ export default function Create() {
       // Deploy from the creator's own account so the contract's `creator` is
       // them — that is who the owner fee split pays.
       const { book, params } = res.deploy;
+      if (!book) throw new Error("Wagers are not configured on this network yet.");
       if (book && wallet.isConnected) {
         const data = encodeFunctionData({
           abi: wagerBookAbi,
@@ -182,28 +194,28 @@ export default function Create() {
           </div>
 
           <h2>Pick your side</h2>
+          <p className="small muted" style={{ marginTop: -4 }}>
+            Tap the side you&rsquo;re taking. Rename either one if it reads better.
+          </p>
           <div className="stack">
-            <button
-              className={`side-option ${side === 0 ? "selected" : ""}`}
-              onClick={() => setSide(0)}
-            >
-              {sideA || "Side A"}
-            </button>
-            <button
-              className={`side-option ${side === 1 ? "selected" : ""}`}
-              onClick={() => setSide(1)}
-            >
-              {sideB || "Side B"}
-            </button>
-          </div>
-
-          <div className="field" style={{ marginTop: 16 }}>
-            <label htmlFor="sideA">Side A label</label>
-            <input id="sideA" value={sideA} onChange={(e) => setSideA(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="sideB">Side B label</label>
-            <input id="sideB" value={sideB} onChange={(e) => setSideB(e.target.value)} />
+            {([
+              [0, sideA, setSideA],
+              [1, sideB, setSideB],
+            ] as const).map(([index, value, set]) => (
+              <div
+                key={index}
+                className={side === index ? "side-row selected" : "side-row"}
+                onClick={() => setSide(index)}
+              >
+                <input
+                  aria-label={index === 0 ? "Side A label" : "Side B label"}
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                  onFocus={() => setSide(index)}
+                />
+                <span className="side-row-mark">{side === index ? "Your side" : "Take this"}</span>
+              </div>
+            ))}
           </div>
 
           <div className="field">
@@ -214,9 +226,15 @@ export default function Create() {
               inputMode="decimal"
               min="1"
               step="1"
+              max={maxStakeCents ? maxStakeCents / 100 : undefined}
               value={stake}
               onChange={(e) => setStake(e.target.value)}
             />
+            {maxStakeCents !== null && (
+              <p className="small muted" style={{ margin: "6px 0 0" }}>
+                Up to {usd(maxStakeCents)} a bet at your standing.
+              </p>
+            )}
           </div>
 
           <div className="field">
@@ -244,7 +262,7 @@ export default function Create() {
           )}
 
           <div className="field">
-            <label htmlFor="phones">Challenge by phone number</label>
+            <label htmlFor="phones">Who are you challenging? (optional)</label>
             <textarea
               id="phones"
               placeholder="(512) 555-1234, (512) 555-9876"
@@ -253,7 +271,8 @@ export default function Create() {
               style={{ minHeight: 64 }}
             />
             <p className="small muted" style={{ margin: "6px 0 0" }}>
-              They get a text with the terms and a code that signs them in.
+              They&rsquo;ll show as invited. You send them the link yourself on the next screen
+              &mdash; a text from you lands better than one from us.
             </p>
           </div>
 
@@ -281,8 +300,22 @@ export default function Create() {
           </div>
 
           <div className="stack" style={{ marginTop: 16 }}>
+            {!wallet.isConnected && (
+              <div className="card">
+                <b>One thing first</b>
+                <p className="small muted" style={{ margin: "6px 0 12px" }}>
+                  A challenge needs a wallet to hold the stakes. It takes one tap and there&rsquo;s
+                  nothing to write down.
+                </p>
+                <ConnectWallet />
+              </div>
+            )}
             <Banner>{error}</Banner>
-            <button className="block" onClick={handleCreate} disabled={busy || !proposition || !stake}>
+            <button
+              className="block"
+              onClick={handleCreate}
+              disabled={busy || !proposition || !stake || !wallet.isConnected}
+            >
               {busy ? "Sending…" : "Send challenge"}
             </button>
             <button className="ghost block" onClick={() => setParsed(null)} disabled={busy}>

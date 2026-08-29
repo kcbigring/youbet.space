@@ -463,3 +463,47 @@ button.small { padding: 8px 12px; font-size: 13px; }
     padding-top: 104px;
   }
 }
+
+/* One row per side: the label is editable in place and the row is the picker,
+   so the proposition is not repeated four times down the form. */
+.side-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 12px 6px 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.side-row.selected {
+  border-color: var(--accent);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.side-row input {
+  background: transparent;
+  border: none;
+  padding: 10px 8px;
+  font-weight: 500;
+}
+
+.side-row input:focus {
+  border: none;
+  outline: none;
+}
+
+.side-row-mark {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.side-row.selected .side-row-mark {
+  color: var(--accent);
+}

@@ -229,6 +229,7 @@ router.get(
     // The home screen groups by what the user has to do next (execution plan §17).
     res.json({
       ok: true,
+      drafts: wagers.filter((w) => w.status === "DRAFT" && w.creatorId === req.userId),
       pending: wagers.filter((w) => w.status === "OPEN" && mine(w)?.state === "INVITED"),
       active: wagers.filter((w) => ["OPEN", "LOCKED"].includes(w.status) && mine(w)?.state === "JOINED"),
       needsAttention: wagers.filter(
@@ -293,6 +294,39 @@ const linkSchema = z.object({
 /// Links an on-chain wager id to its off-chain record. Verifies the terms and
 /// creator recorded on-chain match ours, so a client cannot point its wager at
 /// someone else's escrow.
+/// The on-chain parameters for a draft, so a wager created before the creator
+/// had a wallet can still be put on-chain rather than being stranded.
+router.get(
+  "/:id/deploy-params",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const wager = await loadWager(req.params.id, req.userId!);
+    if (wager.creatorId !== req.userId) throw forbidden("Only the creator can publish this");
+    if (wager.onchainId) throw conflict("This wager is already on-chain");
+
+    const group = wager.groupId
+      ? await prisma.group.findUnique({ where: { id: wager.groupId } })
+      : null;
+
+    res.json({
+      ok: true,
+      book: env.wagerBookAddress ?? null,
+      params: {
+        groupId: String(group?.onchainId ?? 0),
+        termsHash: wager.termsHash,
+        stake: centsToUnits(wager.stakeCents).toString(),
+        bond: centsToUnits(wager.bondCents).toString(),
+        ownerSplitBps: wager.ownerSplitBps,
+        attestationThresholdBps: wager.thresholdBps,
+        fundingDeadline: Math.floor(wager.fundingDeadline.getTime() / 1000),
+        eventDeadline: Math.floor(wager.eventDeadline.getTime() / 1000),
+        resolutionDeadline: Math.floor(wager.resolutionDeadline.getTime() / 1000),
+        maxParticipants: wager.participants.length > 2 ? wager.participants.length : 2,
+        resolutionMethod: wager.resolutionMethod === "ORACLE" ? 1 : 0,
+      },
+    });
+  })
+);
+
 router.post(
   "/:id/link",
   asyncHandler(async (req: AuthedRequest, res) => {

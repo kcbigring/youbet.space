@@ -8,6 +8,7 @@ import { WagerCard } from "../components/WagerCard";
 import { Landing } from "../components/Landing";
 
 interface Feed {
+  drafts: Wager[];
   pending: Wager[];
   active: Wager[];
   needsAttention: Wager[];
@@ -49,7 +50,12 @@ export default function Home() {
   if (!user) return <Landing />;
 
   const empty =
-    feed && !feed.pending.length && !feed.active.length && !feed.needsAttention.length && !feed.recent.length;
+    feed &&
+    !feed.drafts.length &&
+    !feed.pending.length &&
+    !feed.active.length &&
+    !feed.needsAttention.length &&
+    !feed.recent.length;
 
   return (
     <Layout>
@@ -77,6 +83,18 @@ export default function Home() {
       )}
 
       <Banner>{error}</Banner>
+
+      {feed?.drafts.length ? (
+        <>
+          <h2>Not sent yet</h2>
+          <p className="small muted" style={{ marginTop: -6 }}>
+            These never made it on-chain, so nobody can see or join them yet.
+          </p>
+          {feed.drafts.map((w) => (
+            <WagerCard key={w.id} wager={w} userId={user.id} />
+          ))}
+        </>
+      ) : null}
 
       {feed?.needsAttention.length ? (
         <>

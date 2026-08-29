@@ -80,6 +80,12 @@ function extractProposition(text: string): string {
   return text.replace(/[.!?]+$/, "").trim();
 }
 
+/// Side labels sit directly under the proposition in the UI, so repeating it
+/// there reads as a bug. "Yes" and "No" are unambiguous against a stated claim
+/// and short enough to scan — the old fallback produced labels like
+/// "Not: will i use the peloton in the next hour".
+const SIDES: [string, string] = ["Yes", "No"];
+
 export function parseHeuristically(text: string, now = new Date()): ParsedWager {
   const proposition = extractProposition(text);
 
@@ -106,7 +112,7 @@ export function parseHeuristically(text: string, now = new Date()): ParsedWager 
 
   return {
     proposition,
-    sideLabels: [proposition, `Not: ${proposition}`],
+    sideLabels: [...SIDES],
     stakeCents: parseStakeCents(text),
     participants: parseParticipants(text),
     resolution,
@@ -121,7 +127,9 @@ export function parseHeuristically(text: string, now = new Date()): ParsedWager 
 const SYSTEM_PROMPT = `You convert casual bets between friends into structured wager terms.
 Return ONLY a JSON object with these keys:
   proposition   - the claim being bet on, as a short neutral statement
-  sideLabels    - array of exactly 2 strings: what side 0 believes, what side 1 believes
+  sideLabels    - array of exactly 2 short strings naming the outcomes, at most
+                  4 words each. Use "Yes" and "No" for a claim or a question.
+                  Never repeat the proposition back and never prefix with "Not:".
   stakeCents    - integer cents staked per person, or null if unstated
   participants  - array of names the speaker wants to challenge (exclude the speaker)
   resolution    - "ORACLE" if an objective public data source settles it (sports scores,

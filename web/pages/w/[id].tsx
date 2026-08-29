@@ -74,6 +74,41 @@ export default function WagerDetail() {
     await api.post(`/wagers/${id}/sync`);
   }
 
+  /// Puts a draft on-chain. A wager created before its author had a wallet
+  /// exists only in our database, where it reaches nobody.
+  async function publish(id: string) {
+    const res = await api.get<{
+      book: string | null;
+      params: Record<string, string | number>;
+    }>(`/wagers/${id}/deploy-params`);
+    if (!res.book) throw new Error("Wagers are not configured on this network yet.");
+
+    const { params } = res;
+    const data = encodeFunctionData({
+      abi: wagerBookAbi,
+      functionName: "createWager",
+      args: [
+        {
+          groupId: BigInt(params.groupId),
+          termsHash: params.termsHash as `0x${string}`,
+          stake: BigInt(params.stake),
+          bond: BigInt(params.bond),
+          ownerSplitBps: BigInt(params.ownerSplitBps),
+          attestationThresholdBps: BigInt(params.attestationThresholdBps),
+          fundingDeadline: BigInt(params.fundingDeadline),
+          eventDeadline: BigInt(params.eventDeadline),
+          resolutionDeadline: BigInt(params.resolutionDeadline),
+          maxParticipants: Number(params.maxParticipants),
+          resolutionMethod: Number(params.resolutionMethod),
+        },
+      ] as never,
+    });
+
+    await wallet.send([{ to: res.book as `0x${string}`, data }]);
+    const latest = await api.get<{ onchainId: number }>("/wagers/latest-onchain-id");
+    await api.post(`/wagers/${id}/link`, { onchainId: latest.onchainId });
+  }
+
   /// The API returns the exact calls for joining — approving the stake, then
   /// joining — so the amounts are never guessed client-side. They go out as one
   /// batch, so an ERC-20 stake still costs the user a single passkey prompt.
@@ -129,6 +164,42 @@ export default function WagerDetail() {
         {usd(wager.stakeCents)} each · {usd(pot)} pot · started by{" "}
         {wager.creatorId === user.id ? "you" : wager.creator.displayName || "a friend"}
       </p>
+
+      {wager.status === "DRAFT" && wager.creatorId === user.id && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <b>This isn&rsquo;t live yet</b>
+          <p className="small muted" style={{ margin: "6px 0 12px" }}>
+            It was never put on-chain, so nobody can see or join it. Publishing puts the terms
+            somewhere neither of you can change them.
+          </p>
+          {!wallet.isConnected ? (
+            <ConnectWallet />
+          ) : (
+            <button
+              className="block"
+              disabled={busy || wallet.busy}
+              onClick={() => act(() => publish(wager.id))}
+            >
+              Publish this challenge
+            </button>
+          )}
+        </div>
+      )}
+
+      {wager.status === "OPEN" && wager.creatorId === user.id && joined.length < 2 && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <b>Send it to them</b>
+          <p className="small muted" style={{ margin: "6px 0 12px" }}>
+            Nothing happens until someone takes the other side. We don&rsquo;t text anyone on your
+            behalf &mdash; send this from your own phone.
+          </p>
+          <ShareInvite
+            endpoint={`/wagers/${wager.id}/invites`}
+            label="Share this challenge"
+            shareTitle="I'll bet you"
+          />
+        </div>
+      )}
 
       <h2>Sides</h2>
       <div className="stack">
