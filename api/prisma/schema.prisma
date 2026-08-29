@@ -4,6 +4,8 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Cloud Run runs Debian; the local engine alone is not enough in the image.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

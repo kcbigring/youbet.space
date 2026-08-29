@@ -1,0 +1,24 @@
+# Builds the API image from the repository root, because the container needs the
+# compiled contract ABIs in contracts/artifacts as well as the api/ source.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - api/Dockerfile
+      - -t
+      - ${_IMAGE}:${SHORT_SHA}
+      - -t
+      - ${_IMAGE}:latest
+      - .
+
+images:
+  - ${_IMAGE}:${SHORT_SHA}
+  - ${_IMAGE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/youbet-506923/youbet/api

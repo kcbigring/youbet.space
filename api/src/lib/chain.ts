@@ -3,24 +3,33 @@ import fs from "fs";
 import path from "path";
 import { env } from "../env";
 import { ApiError } from "./errors";
+import { wagerBookAbi, groupRegistryAbi, resolverRegistryAbi, treasuryAbi } from "../abi";
 
-/// Reads Hardhat build output so the API and the contracts can never drift.
-const ARTIFACT_ROOT = path.resolve(__dirname, "../../../contracts/artifacts/contracts");
+/// ABIs are generated into src/abi.ts by `npm run export-abi` in contracts/ and
+/// committed, so the running service carries them rather than reading Hardhat's
+/// build output — which is gitignored and absent from a container image.
+const ABIS: Record<string, ethers.InterfaceAbi> = {
+  WagerBook: wagerBookAbi as unknown as ethers.InterfaceAbi,
+  GroupRegistry: groupRegistryAbi as unknown as ethers.InterfaceAbi,
+  ResolverRegistry: resolverRegistryAbi as unknown as ethers.InterfaceAbi,
+  Treasury: treasuryAbi as unknown as ethers.InterfaceAbi,
+};
 
-const artifactCache = new Map<string, { abi: ethers.InterfaceAbi; bytecode: string }>();
+export function artifact(name: string): { abi: ethers.InterfaceAbi; bytecode: string } {
+  const abi = ABIS[name];
+  if (!abi) throw new ApiError(503, `No ABI bundled for ${name}`);
 
-export function artifact(name: string) {
-  const cached = artifactCache.get(name);
-  if (cached) return cached;
+  // Bytecode is only needed to deploy, which tests do locally. Read it from the
+  // Hardhat build when it is there, rather than shipping it in the image.
+  let bytecode = "";
+  const file = path.join(
+    process.env.CONTRACT_ARTIFACTS_DIR || path.resolve(__dirname, "../../../contracts/artifacts/contracts"),
+    `${name}.sol`,
+    `${name}.json`
+  );
+  if (fs.existsSync(file)) bytecode = JSON.parse(fs.readFileSync(file, "utf8")).bytecode;
 
-  const file = path.join(ARTIFACT_ROOT, `${name}.sol`, `${name}.json`);
-  if (!fs.existsSync(file)) {
-    throw new ApiError(503, `Contract artifact for ${name} not found. Run "npm run compile" in contracts/.`);
-  }
-  const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-  const value = { abi: parsed.abi as ethers.InterfaceAbi, bytecode: parsed.bytecode as string };
-  artifactCache.set(name, value);
-  return value;
+  return { abi, bytecode };
 }
 
 let provider: ethers.JsonRpcProvider | null = null;
