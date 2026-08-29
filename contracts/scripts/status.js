@@ -48,8 +48,9 @@ async function main() {
 
   const gasPrice = fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
   const cost = DEPLOY_GAS * gasPrice;
-  // Deploying is cheap but gas can spike; ask for headroom rather than the exact cost.
-  const recommended = cost * 20n;
+  // The deployer only ever pays for this one deploy — users fund their own
+  // transactions — so a small multiple covers a gas spike or a redeploy.
+  const recommended = cost * 3n;
 
   console.log(`network   ${name} (chain ${net.chainId}), block ${block}`);
   console.log(`deployer  ${wallet.address}`);

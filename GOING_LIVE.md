@@ -17,15 +17,17 @@ cd contracts && npm run status
 This key deploys the platform's four contracts. It never signs for a user —
 users hold their own passkey-owned smart accounts.
 
-Deploying all four costs **~0.00006 ETH** at the current 0.011 gwei. Any faucet
-gives 0.05–0.1 ETH, which is roughly a thousand deploys. One drip is plenty.
+Deploying all four costs **~0.00006 ETH** at the current 0.011 gwei. The CDP
+faucet drips **0.0001 ETH** per request, so two or three requests is ample —
+the deployer never pays for anything else, since users fund their own
+transactions.
 
 ### Option A — Coinbase Developer Platform (you already have an account)
 
 1. Go to <https://portal.cdp.coinbase.com/products/faucet>
 2. Network: **Base Sepolia**. Token: **ETH**
 3. Paste `0x7651597885567cbBCAc344C6139bBB057d5C9E47`
-4. Request. Limit is 0.1 ETH per day, no mainnet balance required.
+4. Request two or three times. No mainnet balance required.
 
 ### Option B — Alchemy
 
