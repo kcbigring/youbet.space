@@ -17,9 +17,17 @@ export const config: Config = createConfig({
   connectors: [
     coinbaseWallet({
       appName: "youbet.space",
-      // Force the smart-account flow: no browser extension, no seed phrase,
-      // a passkey is the only credential.
-      preference: { options: "smartWalletOnly" },
+      preference: {
+        // Force the smart-account flow: no browser extension, no seed phrase,
+        // a passkey is the only credential.
+        options: "smartWalletOnly",
+        // Coinbase runs two key services and the production one is mainnet
+        // only — it answers a Base Sepolia request with "this chain is not
+        // supported". Testnets have to be pointed at the dev host.
+        ...(activeChain.id === baseSepolia.id
+          ? { keysUrl: "https://keys-dev.coinbase.com/connect" }
+          : {}),
+      },
     }),
   ],
   transports: {
