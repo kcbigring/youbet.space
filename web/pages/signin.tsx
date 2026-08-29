@@ -2,6 +2,13 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import { api, setToken, ApiError } from "../lib/api";
 import { Banner } from "../components/Layout";
+import {
+  confirmVerificationCode,
+  phoneVerificationAvailable,
+  resetVerifier,
+  sendVerificationCode,
+  type ConfirmationResult,
+} from "../lib/firebase";
 
 export default function SignIn() {
   const router = useRouter();
@@ -12,6 +19,7 @@ export default function SignIn() {
   const [devCode, setDevCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -25,8 +33,25 @@ export default function SignIn() {
     }
   }
 
+  /// Google's Identity Platform delivers the SMS, so there is no carrier
+  /// registration to wait on and nothing for us to send. The API's own one-time
+  /// codes remain as the local-development path, where Firebase is not set up.
   const requestCode = () =>
     run(async () => {
+      if (phoneVerificationAvailable) {
+        const e164 = phone.trim().startsWith("+") ? phone.trim() : `+1${phone.replace(/\D/g, "")}`;
+        try {
+          setConfirmation(await sendVerificationCode(e164, "recaptcha-slot"));
+          setPhone(e164);
+          setStage("code");
+          return;
+        } catch (err) {
+          // A failed attempt leaves the reCAPTCHA widget unusable.
+          resetVerifier();
+          throw err;
+        }
+      }
+
       const res = await api.post<{ phone: string; devCode?: string }>("/auth/request-code", { phone });
       setPhone(res.phone);
       setDevCode(res.devCode ?? null);
@@ -35,10 +60,18 @@ export default function SignIn() {
 
   const verify = () =>
     run(async () => {
-      const res = await api.post<{ token: string; landing: { groupId?: string; wagerId?: string } }>(
-        "/auth/verify",
-        { phone, code, displayName: name || undefined }
-      );
+      // With Firebase, Google proves the number and hands us a token to exchange
+      // for a session; there is no code for us to check.
+      const res = confirmation
+        ? await api.post<{ token: string; landing: { groupId?: string; wagerId?: string } }>("/auth/firebase", {
+            idToken: await confirmVerificationCode(confirmation, code),
+            displayName: name || undefined,
+          })
+        : await api.post<{ token: string; landing: { groupId?: string; wagerId?: string } }>("/auth/verify", {
+            phone,
+            code,
+            displayName: name || undefined,
+          });
       setToken(res.token);
 
       // An invite drops you straight into whatever brought you here.
@@ -116,11 +149,22 @@ export default function SignIn() {
             <button className="block" onClick={verify} disabled={busy || code.length !== 6}>
               {busy ? "Verifying…" : "Verify"}
             </button>
-            <button className="ghost block" onClick={() => setStage("phone")} disabled={busy}>
+            <button
+              className="ghost block"
+              onClick={() => {
+                resetVerifier();
+                setConfirmation(null);
+                setStage("phone");
+              }}
+              disabled={busy}
+            >
               Use a different number
             </button>
           </div>
         )}
+
+        {/* The invisible reCAPTCHA needs a real element to attach to. */}
+        <div id="recaptcha-slot" />
       </div>
     </div>
   );

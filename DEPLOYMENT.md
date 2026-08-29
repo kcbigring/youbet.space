@@ -48,31 +48,19 @@ deploy contracts and manage resolvers, both of which are run locally. The
 `/admin/relayer` and `/admin/resolvers` endpoints therefore return 503 in
 production, which is the correct trade.
 
-## The API is not public yet
+## Public access
 
-The org policy `constraints/iam.allowedPolicyMemberDomains` restricts IAM
-members to customer `C02k4bkpt`, so `allUsers` cannot be granted
-`roles/run.invoker` and Cloud Run refuses anonymous traffic. The service is
-deployed and healthy — `/ready` is green on database, chain, contracts and phone
-verification — but only reachable with an identity token.
+The org policy `constraints/iam.allowedPolicyMemberDomains` restricted IAM
+members to one Workspace customer, so `allUsers` could not be granted
+`roles/run.invoker`. Resolved with a project-scoped override — **Replace**, not
+merge: merging leaves the parent's restriction in force, which is the thing that
+was blocking it.
 
-Project `owner` is not enough to override this; it needs
-`roles/orgpolicy.policyAdmin` at organization `319787393607`. Someone with that
-role should add a project-scoped exception:
+That override removes domain-restricted sharing for everything in
+`youbet-506923`, not just Cloud Run, so the project is worth keeping narrow.
 
-**Console** → IAM & Admin → Organization Policies → *Domain restricted sharing*
-→ Manage policy → scope to `youbet-506923` → Override parent's policy → Allow All.
-
-Or:
-
-```bash
-gcloud org-policies set-policy policy.yaml --project youbet-506923
-# policy.yaml:
-#   name: projects/youbet-506923/policies/iam.allowedPolicyMemberDomains
-#   spec: { inheritFromParent: false, rules: [{ allowAll: true }] }
-```
-
-Then:
+IAM enforcement of the change lags the policy write by a minute or two; the
+binding fails with `FAILED_PRECONDITION` until it catches up.
 
 ```bash
 gcloud run services add-iam-policy-binding youbet-api \
@@ -80,7 +68,16 @@ gcloud run services add-iam-policy-binding youbet-api \
   --member=allUsers --role=roles/run.invoker
 ```
 
-Until that lands, https://youbet.space loads but every API call fails.
+## Sign-in in production
+
+`smsEnabled` is false — Twilio is not configured — and the API correctly
+withholds the development one-time code outside development. Together that
+would have made the front door unusable: no code sent, none returned.
+
+Sign-in therefore runs on Identity Platform, where Google delivers the SMS.
+`/signin` uses Firebase when `NEXT_PUBLIC_FIREBASE_API_KEY` is set and falls
+back to the API's own codes locally, where Firebase is not configured. Invite
+links never needed SMS at all.
 
 ## Reminders
 
