@@ -37,6 +37,14 @@ Ethereum mainnet in the connected wallet, as anti-sybil.
 If you already hold Sepolia ETH: <https://superbridge.app/base-sepolia>.
 Slower (a few minutes), but no faucet limits.
 
+### Or from the command line
+
+Once you have a secret API key from the `youbet` project in `.env.local`:
+
+```bash
+cd contracts && npm run faucet
+```
+
 ### Confirm it landed
 
 ```bash
@@ -137,12 +145,20 @@ Those keys live in the **Coinbase Sandbox**, and their scopes are
 Coinbase business/commerce permissions. The faucet, paymaster and wallet APIs
 are **CDP Platform**, a separate product with separate keys and separate scopes.
 
+Your real project is **youbet** (`272f4a0c-c072-4b8e-9408-bb6b26774de4`),
+recorded as `CDP_PROJECT_ID` in `.env.local`. A project ID identifies a project
+but authenticates nothing — the SDK takes only an API key id and secret.
+
 To get keys that work:
 
 1. In the Coinbase portal, use the environment dropdown next to your name
-   (currently showing **Sandbox**) and switch to your real project.
-2. Go to <https://portal.cdp.coinbase.com> → **API Keys** → *Create secret API key*.
-3. Those keys are what the faucet API and paymaster accept.
+   (currently showing **Sandbox**) and switch to the **youbet** project.
+2. **API Keys** → *Create secret API key*.
+3. Put them in `.env.local` as `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET`
+   (already stubbed there).
+
+Then `npm run faucet` works, and the same project is where you enable the
+paymaster.
 
 The **web faucet in step 1 needs no keys at all** — it is the fastest path and
 does not depend on any of this. Sort the keys out only when you want the
