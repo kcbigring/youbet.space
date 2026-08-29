@@ -38,7 +38,7 @@ export function Landing() {
       <section className="landing-hero">
         <h1>
           Private wagers between friends.
-          <span>Nobody has to chase anybody.</span>
+          <span>A handshake that holds.</span>
         </h1>
         <p className="landing-lede">
           &ldquo;I&rsquo;ll bet you.&rdquo; You already say it. The problem is everything after
@@ -66,6 +66,40 @@ export function Landing() {
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="landing-section">
+        <h2 className="landing-h2">Why be the one who starts it</h2>
+        <p className="landing-body">
+          Normally the person who proposes the bet ends up running it. You collect from
+          everyone, you&rsquo;re the one who remembers what was actually agreed, and when it&rsquo;s
+          close you have to be the one who calls it. That&rsquo;s why good bets die in the group
+          chat &mdash; nobody wants the job.
+        </p>
+        <p className="landing-body">Here the job doesn&rsquo;t exist.</p>
+        <div className="landing-grid">
+          <div className="landing-card">
+            <h3>You write the terms</h3>
+            <p>
+              The claim, the stake, the deadline, how it gets settled. Everyone reads it before a
+              dollar moves, so there&rsquo;s nothing to argue about later.
+            </p>
+          </div>
+          <div className="landing-card">
+            <h3>You pick who&rsquo;s in</h3>
+            <p>
+              Send it to one person or the whole group. They take a side from the link &mdash; no
+              account to set up first.
+            </p>
+          </div>
+          <div className="landing-card">
+            <h3>You collect from nobody</h3>
+            <p>
+              Everyone funds their own side up front. The winner gets paid the moment it&rsquo;s
+              resolved, and you never send a single reminder.
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="landing-section landing-bond">
