@@ -10,6 +10,19 @@ import {
   type ConfirmationResult,
 } from "../lib/firebase";
 
+/// Firebase surfaces codes like `auth/invalid-phone-number`. Translate the ones
+/// a user can act on, and pass anything else through rather than hiding it.
+function friendlyAuthError(message: string): string {
+  if (/invalid-phone-number/.test(message)) return "That phone number does not look right.";
+  if (/too-many-requests/.test(message)) return "Too many attempts. Wait a few minutes and try again.";
+  if (/invalid-verification-code/.test(message)) return "That code was not correct.";
+  if (/code-expired/.test(message)) return "That code expired. Request a new one.";
+  if (/quota-exceeded/.test(message)) return "Too many codes sent right now. Try again shortly.";
+  if (/unsupported|region/i.test(message)) return "We cannot text that country yet.";
+  if (/captcha/i.test(message)) return "Verification check failed. Reload the page and try again.";
+  return message;
+}
+
 export default function SignIn() {
   const router = useRouter();
   const [stage, setStage] = useState<"phone" | "code">("phone");
@@ -27,7 +40,11 @@ export default function SignIn() {
     try {
       await action();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong");
+      // Surface the real reason. Collapsing everything to "Something went wrong"
+      // hid a Firebase region-policy error behind a message that said nothing.
+      const message =
+        err instanceof ApiError || err instanceof Error ? err.message : String(err);
+      setError(friendlyAuthError(message));
     } finally {
       setBusy(false);
     }
