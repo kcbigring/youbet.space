@@ -65,6 +65,7 @@ From §9 of the plan, enforced both on-chain and in the API:
 
 ## Docs
 
+- [GOING_LIVE.md](GOING_LIVE.md) — fund, deploy, and turn it on. Start here.
 - [DEPLOY.md](DEPLOY.md) — deploying contracts and services to Base.
 - [SMART_WALLET.md](SMART_WALLET.md) — embedded wallets and the custody question.
 - [MONITORING.md](MONITORING.md) — health, readiness, metrics.
