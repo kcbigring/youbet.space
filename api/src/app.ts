@@ -9,6 +9,7 @@ import groupRoutes from "./routes/groups";
 import wagerRoutes from "./routes/wagers";
 import userRoutes from "./routes/users";
 import systemRoutes from "./routes/system";
+import jobRoutes from "./routes/jobs";
 
 export function createApp() {
   if (env.isProduction && !process.env.OTP_PEPPER) {
@@ -44,6 +45,7 @@ export function createApp() {
   app.use("/groups", groupRoutes);
   app.use("/wagers", wagerRoutes);
   app.use("/users", userRoutes);
+  app.use("/jobs", jobRoutes);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: "Not found" }));
 

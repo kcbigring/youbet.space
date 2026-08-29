@@ -232,14 +232,23 @@ model Comment {
 }
 
 model Notification {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind      String
-  body      String
-  wagerId   String?
+  id      String  @id @default(cuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// e.g. RESOLVE_REMINDER_24H. Part of the idempotency key.
+  kind    String
+  title   String
+  body    String
+  wagerId String?
+
+  /// Written before anything is dispatched, so a retried job cannot notify
+  /// twice. sentAt records that a channel actually accepted it.
+  sentAt    DateTime?
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
+  /// One notification of a given kind per user per wager, ever.
+  @@unique([userId, wagerId, kind])
   @@index([userId, readAt])
+  @@index([sentAt])
 }
