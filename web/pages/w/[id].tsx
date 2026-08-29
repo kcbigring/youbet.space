@@ -142,9 +142,12 @@ export default function WagerDetail() {
   const { wager, comments, onchain } = detail;
   const me = wager.participants.find((p) => p.userId === user.id);
   const joined = wager.participants.filter((p) => p.state === "JOINED");
-  const invited = wager.participants.filter((p) => p.state === "INVITED");
+  const invited = wager.participants.filter((p) => p.state === "INVITED" && p.userId !== user.id);
   const pot = wager.stakeCents * joined.length;
   const eventOver = new Date(wager.eventDeadline) < new Date();
+
+  const sideCount = (list: typeof wager.participants, s: number) =>
+    list.filter((p) => p.side === s).length;
 
   const canJoin = wager.status === "OPEN" && me?.state !== "JOINED" && new Date(wager.fundingDeadline) > new Date();
   const canResolve = wager.status === "LOCKED" && me?.state === "JOINED" && !me.attestedAt;
@@ -166,11 +169,12 @@ export default function WagerDetail() {
       </p>
 
       {wager.status === "DRAFT" && wager.creatorId === user.id && (
-        <div className="card" style={{ marginTop: 18 }}>
-          <b>This isn&rsquo;t live yet</b>
+        <div className="next-step">
+          <span className="next-step-tag">Step 1 of 2</span>
+          <b>Publish it before you send it</b>
           <p className="small muted" style={{ margin: "6px 0 12px" }}>
-            It was never put on-chain, so nobody can see or join it. Publishing puts the terms
-            somewhere neither of you can change them.
+            Right now this only exists here. Publishing locks the terms on-chain so nobody can
+            change them &mdash; then you get a link to send.
           </p>
           {!wallet.isConnected ? (
             <ConnectWallet />
@@ -186,7 +190,18 @@ export default function WagerDetail() {
         </div>
       )}
 
-      {wager.status === "OPEN" && wager.creatorId === user.id && joined.length < 2 && (
+      {wager.status === "OPEN" && me?.state !== "JOINED" && wager.creatorId === user.id && (
+        <div className="next-step">
+          <span className="next-step-tag">Step 2 of 2</span>
+          <b>Put your money on it</b>
+          <p className="small muted" style={{ margin: "6px 0 12px" }}>
+            You started this one but haven&rsquo;t funded your side yet. Pick it below, then send
+            the link.
+          </p>
+        </div>
+      )}
+
+      {wager.status === "OPEN" && sideCount(joined, 1 - (me?.side ?? 0)) === 0 && (
         <div style={{ marginTop: 18 }}>
           <ShareInvite
             endpoint={`/wagers/${wager.id}/invites`}
