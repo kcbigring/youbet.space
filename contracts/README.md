@@ -57,34 +57,77 @@ neutral on whether a wager becomes disputed.
 ## One contract per wager
 
 Every wager is its own deployed `Wager` contract. That buys real isolation — a
-bug in one wager cannot touch another's escrow — but it costs more than it
-first appears, and both costs land at the same time.
+bug in one wager cannot touch another's escrow — and it costs more than it
+first appears. Measured, not estimated:
 
-**Gas.** `createWager` runs about **2,000,000 gas**, because it deploys a full
-contract rather than writing a row. A mapping-based design would be closer to
-150–200k. On Base that is fractions of a cent today; it is not free at scale,
-and it is the single most expensive thing a user does.
+| | per-contract (today) | single contract | |
+| --- | --- | --- | --- |
+| `createWager` | 2,009,893 gas | 125,501 gas | **16× cheaper** |
 
-**Gas sponsorship.** This is the sharper problem. Paymasters sponsor calls to
-*allowlisted contract addresses*. The factory has one fixed address and
-allowlists fine, but every wager gets a brand-new address, so `join`, `attest`,
-`concede` and `withdraw` can never be allowlisted in advance. Sponsorship covers
-wager creation and then silently stops — which is the opposite of what you want,
-since creating is the cheap part and joining is where users show up.
+`Wager`'s runtime bytecode is 9,074 bytes. At 200 gas per byte, **1,814,800 of
+those 2 million gas — 90% — is paying to store another identical copy of the
+same code.** Every wager redeploys the same logic.
 
-You can bolt on a workaround: watch `WagerCreated` and push each new address
-into the paymaster policy through the CDP API. It races the user's next
-transaction and it means the paymaster policy grows without bound.
+### The gas is not the real problem
 
-**The alternative** is a single `WagerBook` contract holding wagers by id:
-`join(wagerId, side)` instead of `wager.join(side)`. One fixed address to
-allowlist, an order of magnitude less gas per wager, and one place to read
-state from.
+On Base the difference is pennies at normal gas prices, and only starts to
+matter under load:
 
-What it gives up is isolation: a storage bug drains everything instead of one
-wager. That is a real tradeoff and it deserves a decision rather than a default.
-The pull-payment accounting already in `Wager` transfers over unchanged, which
-is the part that most needs to be right.
+| gas price | per-contract | single contract |
+| --- | --- | --- |
+| 0.01 gwei | $0.06 | $0.004 |
+| 0.5 gwei | $3.02 | $0.19 |
+| 2 gwei | $12.06 | $0.75 |
 
-This has not been changed — the current design is per-wager contracts. Decide
-before mainnet, because migrating live wagers is much harder than choosing now.
+Worth having, but not on its own a reason to change anything.
+
+### Gas sponsorship is the real problem
+
+Paymasters decide whether to pay for a UserOperation, and the standard policy
+primitive — CDP's included — is an **allowlist of contract addresses**, because
+sponsoring arbitrary calls means anyone can drain your gas budget.
+
+The factory has one fixed address, so `createWager` allowlists fine. But every
+wager gets a **fresh address**, so `join`, `attest`, `concede` and `withdraw`
+can never be allowlisted ahead of time. Sponsorship covers creating a wager and
+then stops.
+
+That gap lands in the worst possible place. The person who needs sponsorship
+most is the friend who just tapped a link, has no wallet, no ETH, and no reason
+to care about any of this — and joining is exactly the call that cannot be
+sponsored. Creating a wager, which the already-committed user does, is the one
+thing that works.
+
+Workarounds exist and all leak:
+
+- Watch `WagerCreated` and push each new address into the policy via API. It
+  races the user's next transaction, grows the policy without bound, and adds a
+  background service whose failure silently breaks funding.
+- Use a provider with programmatic or webhook-based sponsorship instead of
+  address allowlists. Workable, but you are now running that decision service.
+
+### The alternative
+
+A single `WagerBook` contract holding wagers by id: `join(wagerId, side)`
+instead of `wager.join(side)`. One address to allowlist, sponsorship works
+everywhere, 16× less gas per wager, one place to read state from.
+
+What it gives up is isolation. Today each `Wager` holds only its own stakes, so
+an accounting bug is bounded by that one wager. In a shared contract every
+wager's funds sit in one place and a storage bug reaches all of them. That is a
+genuine trade, and the reason this has not simply been changed.
+
+The pull-payment accounting already in `Wager` carries over unchanged, which is
+the part that most needs to be right.
+
+### When to decide
+
+Right now there are zero wagers on-chain, so switching is a pure code change.
+
+Later is harder but not catastrophic: deployed wagers are immutable and cannot
+be migrated, so the API and web would carry both shapes until every open wager
+settles. Since the resolution window is 72 hours by default, that is about a
+week of dual-path code plus a freeze, not an indefinite migration.
+
+The cost of waiting is real but bounded. The cost of launching a paymaster that
+silently fails to sponsor the invite path is the one to avoid.

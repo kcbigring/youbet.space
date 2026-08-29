@@ -131,8 +131,9 @@ That means sponsorship silently covers wager *creation* and nothing else. The
 workaround is adding each new wager address to the policy via the CDP API right
 after it is created, which is fragile and racy.
 
-The real fix is architectural, and it pays for itself twice — see
-[the note in contracts/README.md](contracts/README.md#one-contract-per-wager).
+The gap lands on the invited friend — the one person with no wallet and no ETH.
+See [contracts/README.md](contracts/README.md#one-contract-per-wager) for the
+measured numbers and the alternative.
 
 ---
 
