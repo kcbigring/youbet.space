@@ -6,6 +6,7 @@ import type { Reputation } from "../lib/types";
 import { Layout, Banner } from "../components/Layout";
 import { VerifyPhone } from "../components/VerifyPhone";
 import { ConnectWallet } from "../components/ConnectWallet";
+import { TestMoney } from "../components/TestMoney";
 
 interface Me {
   id: string;
@@ -14,7 +15,7 @@ interface Me {
 }
 
 interface WalletInfo {
-  wallet: { address: string; chainId: number; balanceEth: string; balanceCents: number | null } | null;
+  wallet: { address: string; chainId: number; balanceUnits: string; balanceCents: number | null } | null;
   limits: {
     monthlyLimitCents: number;
     committedCents: number;
@@ -74,10 +75,14 @@ export default function Wallet() {
           <div className="card">
             <div className="small muted">Balance</div>
             <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em", margin: "4px 0" }}>
-              {info.wallet!.balanceCents != null ? usd(info.wallet!.balanceCents) : `${info.wallet!.balanceEth} ETH`}
+              {usd(info.wallet!.balanceCents ?? 0)}
             </div>
             <div className="small muted">
               {CHAINS[info.wallet!.chainId] || `Chain ${info.wallet!.chainId}`} · gas is sponsored
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <TestMoney onFunded={() => router.reload()} />
             </div>
 
             <div className="divider" style={{ margin: "14px 0" }} />

@@ -7,13 +7,13 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const ARTIFACTS = path.join(ROOT, "artifacts/contracts");
-const CONTRACTS = ["WagerBook", "GroupRegistry", "ResolverRegistry", "Treasury"];
+const CONTRACTS = ["WagerBook", "GroupRegistry", "ResolverRegistry", "Treasury", "TestUSD"];
 
 // Both consumers get the ABIs committed as source. The API used to read
 // Hardhat's build output at runtime, which meant the deployed container needed
 // a directory that is gitignored — and could silently drift from the contracts.
 const TARGETS = [
-  { file: path.resolve(ROOT, "../web/lib/abi.ts"), contracts: ["WagerBook", "GroupRegistry"] },
+  { file: path.resolve(ROOT, "../web/lib/abi.ts"), contracts: ["WagerBook", "GroupRegistry", "TestUSD"] },
   { file: path.resolve(ROOT, "../api/src/abi.ts"), contracts: CONTRACTS },
 ];
 

@@ -7,6 +7,7 @@ import { encodeFunctionData } from "viem";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
 import { ConnectWallet } from "../../components/ConnectWallet";
+import { TestMoney } from "../../components/TestMoney";
 import { useWallet } from "../../lib/useWallet";
 import { wagerBookAbi } from "../../lib/abi";
 import { wagerBookAddress } from "../../lib/contracts";
@@ -73,20 +74,17 @@ export default function WagerDetail() {
     await api.post(`/wagers/${id}/sync`);
   }
 
-  /// The API returns the exact call for joining, including the stake and bond
-  /// the escrow expects, so the amount is never guessed client-side.
+  /// The API returns the exact calls for joining — approving the stake, then
+  /// joining — so the amounts are never guessed client-side. They go out as one
+  /// batch, so an ERC-20 stake still costs the user a single passkey prompt.
   async function join(id: string, side: number) {
-    const res = await api.post<{ call: { to: string; data: string; value: string } }>(
-      `/wagers/${id}/join`,
-      { side }
+    const res = await api.post<{ calls: { to: string; data: string }[] }>(`/wagers/${id}/join`, {
+      side,
+    });
+    await onChain(
+      id,
+      res.calls.map((c) => ({ to: c.to as `0x${string}`, data: c.data as `0x${string}` }))
     );
-    await onChain(id, [
-      {
-        to: res.call.to as `0x${string}`,
-        data: res.call.data as `0x${string}`,
-        value: BigInt(res.call.value),
-      },
-    ]);
   }
 
   /// Every wager action targets the one book contract, with the wager id as the
@@ -169,6 +167,9 @@ export default function WagerDetail() {
             committed. The bond comes back when you resolve on time.
           </p>
           <div className="stack">
+            {/* An invited friend arrives with nothing; this is where they get
+                something to bet with. */}
+            <TestMoney />
             {wager.sideLabels.map((label, index) => (
               <button
                 key={index}

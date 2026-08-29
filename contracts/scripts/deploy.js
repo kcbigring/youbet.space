@@ -2,13 +2,15 @@ const fs = require("fs");
 const path = require("path");
 const { ethers, network } = require("hardhat");
 
-// Risk controls from the execution plan, expressed on-chain in native units.
-// $100 max per person per wager and $500 max pot, converted at DEPLOY_ETH_USD.
-const ETH_USD = Number(process.env.DEPLOY_ETH_USD || 3000);
+// Risk controls from the execution plan. Stakes are denominated in a six-decimal
+// dollar token, so these are exact — no exchange rate, no drift.
 const MAX_STAKE_USD = Number(process.env.MAX_STAKE_USD || 100);
 const MAX_POT_USD = Number(process.env.MAX_POT_USD || 500);
 
-const toWei = (usd) => ethers.parseEther((usd / ETH_USD).toFixed(18));
+const usd = (dollars) => BigInt(Math.round(dollars * 1e6));
+
+// On mainnet, point at real USDC instead of deploying test dollars.
+const STAKE_TOKEN = process.env.STAKE_TOKEN_ADDRESS;
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -17,6 +19,16 @@ async function main() {
   console.log(`Network:  ${network.name}`);
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Balance:  ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
+
+  let tokenAddress = STAKE_TOKEN;
+  if (tokenAddress) {
+    console.log(`Stake token:      ${tokenAddress} (existing)`);
+  } else {
+    const testUsd = await (await ethers.getContractFactory("TestUSD")).deploy(owner);
+    await testUsd.waitForDeployment();
+    tokenAddress = await testUsd.getAddress();
+    console.log(`TestUSD:          ${tokenAddress}`);
+  }
 
   const treasury = await (await ethers.getContractFactory("Treasury")).deploy(owner);
   await treasury.waitForDeployment();
@@ -30,18 +42,19 @@ async function main() {
   await resolvers.waitForDeployment();
   console.log(`ResolverRegistry: ${await resolvers.getAddress()}`);
 
-  const maxStakeWei = toWei(MAX_STAKE_USD);
-  const maxPotWei = toWei(MAX_POT_USD);
+  const maxStake = usd(MAX_STAKE_USD);
+  const maxPot = usd(MAX_POT_USD);
 
   const book = await (
     await ethers.getContractFactory("WagerBook")
   ).deploy(
     owner,
+    tokenAddress,
     process.env.TREASURY_ADDRESS || (await treasury.getAddress()),
     await groups.getAddress(),
     await resolvers.getAddress(),
-    maxStakeWei,
-    maxPotWei
+    maxStake,
+    maxPot
   );
   await book.waitForDeployment();
   console.log(`WagerBook:        ${await book.getAddress()}`);
@@ -58,14 +71,14 @@ async function main() {
     deployer: deployer.address,
     owner,
     limits: {
-      ethUsd: ETH_USD,
       maxStakeUsd: MAX_STAKE_USD,
       maxPotUsd: MAX_POT_USD,
-      maxStakeWei: maxStakeWei.toString(),
-      maxPotWei: maxPotWei.toString(),
+      maxStakeUnits: maxStake.toString(),
+      maxPotUnits: maxPot.toString(),
       feeBps: 100,
     },
     contracts: {
+      StakeToken: tokenAddress,
       Treasury: await treasury.getAddress(),
       GroupRegistry: await groups.getAddress(),
       ResolverRegistry: await resolvers.getAddress(),

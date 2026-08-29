@@ -45,6 +45,7 @@ console.log(`Syncing ${network} (chain ${record.chainId}) into:`);
 setVars(path.join(repoRoot, ".env.local"), {
   CHAIN_ID: record.chainId,
   WAGER_BOOK_ADDRESS: c.WagerBook,
+  STAKE_TOKEN_ADDRESS: c.StakeToken,
   GROUP_REGISTRY_ADDRESS: c.GroupRegistry,
   RESOLVER_REGISTRY_ADDRESS: c.ResolverRegistry,
   TREASURY_ADDRESS: c.Treasury,
@@ -53,6 +54,7 @@ setVars(path.join(repoRoot, ".env.local"), {
 setVars(path.join(repoRoot, "web/.env.local"), {
   NEXT_PUBLIC_CHAIN_ID: record.chainId,
   NEXT_PUBLIC_WAGER_BOOK_ADDRESS: c.WagerBook,
+  NEXT_PUBLIC_STAKE_TOKEN_ADDRESS: c.StakeToken,
 });
 
 console.log("\nRestart the API and `next dev` to pick these up.");

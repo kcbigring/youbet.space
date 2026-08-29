@@ -1,6 +1,11 @@
-import { wagerBookAbi } from "./abi";
+import { wagerBookAbi, testUSDAbi } from "./abi";
 
-export { wagerBookAbi };
+export { wagerBookAbi, testUSDAbi };
+
+/// Stakes are denominated in a six-decimal dollar token — test dollars on
+/// testnet, USDC on mainnet — so "$25" stays $25 rather than tracking ETH.
+export const stakeTokenAddress = (process.env.NEXT_PUBLIC_STAKE_TOKEN_ADDRESS || "") as `0x${string}`;
+export const hasStakeToken = /^0x[a-fA-F0-9]{40}$/.test(stakeTokenAddress);
 
 /// One contract holds every wager, keyed by id — so there is a single address
 /// for a paymaster to allowlist, which is what makes sponsored `join` possible.

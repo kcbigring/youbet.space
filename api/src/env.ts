@@ -35,13 +35,14 @@ export const env = {
   chainId: num(process.env.CHAIN_ID, 84532),
   rpcUrl: process.env.BASE_RPC || process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",
   deployerPrivateKey: process.env.DEPLOYER_PRIVATE_KEY,
+  /// ERC-20 the stakes are denominated in: test dollars on testnet, USDC on
+  /// mainnet. Six decimals either way.
+  stakeTokenAddress: process.env.STAKE_TOKEN_ADDRESS,
   /// The single WagerBook contract holding every wager.
   wagerBookAddress: process.env.WAGER_BOOK_ADDRESS || process.env.FACTORY_ADDRESS,
   groupRegistryAddress: process.env.GROUP_REGISTRY_ADDRESS,
   resolverRegistryAddress: process.env.RESOLVER_REGISTRY_ADDRESS,
   treasuryAddress: process.env.TREASURY_ADDRESS,
-  /// USD per native token, used to convert the product's cent-denominated limits.
-  ethUsd: num(process.env.ETH_USD, 3000),
 
   // Risk controls from the execution plan.
   maxStakeCents: num(process.env.MAX_STAKE_CENTS, 10_000),

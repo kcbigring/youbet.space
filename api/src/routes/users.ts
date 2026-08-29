@@ -5,8 +5,8 @@ import { asyncHandler } from "../lib/http";
 import { notFound } from "../lib/errors";
 import { authenticate, type AuthedRequest } from "../lib/auth";
 import { reputationFor, monthlyVolumeCents } from "../lib/reputation";
-import { getProvider } from "../lib/chain";
-import { weiToCents } from "../lib/money";
+import { contractAt } from "../lib/chain";
+import { unitsToCents } from "../lib/money";
 import { env } from "../env";
 
 const router = Router();
@@ -34,12 +34,17 @@ router.get(
       });
     }
 
+    // The spendable balance is the stake token, not the native token — users
+    // never hold ETH, since gas is sponsored.
     let balanceCents: number | null = null;
-    let balanceWei = "0";
+    let balanceUnits = "0";
     try {
-      const balance = await getProvider().getBalance(address);
-      balanceWei = balance.toString();
-      balanceCents = weiToCents(balance);
+      if (env.stakeTokenAddress) {
+        const token = contractAt("TestUSD", env.stakeTokenAddress);
+        const balance: bigint = await token.balanceOf(address);
+        balanceUnits = balance.toString();
+        balanceCents = unitsToCents(balance);
+      }
     } catch (error) {
       console.warn("Could not read wallet balance", error);
     }
@@ -51,8 +56,7 @@ router.get(
       wallet: {
         address,
         chainId: env.chainId,
-        balanceWei,
-        balanceEth: ethers.formatEther(balanceWei),
+        balanceUnits,
         balanceCents,
       },
       limits: {

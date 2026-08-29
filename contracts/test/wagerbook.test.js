@@ -3,8 +3,10 @@ const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 const BPS = 10_000n;
-const STAKE = ethers.parseEther("0.025"); // "$25 each"
-const BOND = ethers.parseEther("0.001"); // "$1 resolution bond"
+// Stakes are dollars in a six-decimal token, not a fraction of ETH.
+const usd = (dollars) => BigInt(Math.round(dollars * 1e6));
+const STAKE = usd(25); // "$25 each"
+const BOND = usd(1); // "$1 resolution bond"
 const DAY = 24 * 60 * 60;
 
 const Resolution = { Attestation: 0, Oracle: 1 };
@@ -18,16 +20,27 @@ async function deployStack() {
   const resolvers = await (await ethers.getContractFactory("ResolverRegistry")).deploy(deployer.address);
   await resolvers.setResolver(oracle.address, true, "test-sports-feed");
 
+  const token = await (await ethers.getContractFactory("TestUSD")).deploy(deployer.address);
+
   const book = await (await ethers.getContractFactory("WagerBook")).deploy(
     deployer.address,
+    await token.getAddress(),
     await treasury.getAddress(),
     await groups.getAddress(),
     await resolvers.getAddress(),
-    ethers.parseEther("0.1"), // max stake per person
-    ethers.parseEther("0.5") // max pot
+    usd(100), // max stake per person
+    usd(500) // max pot
   );
 
-  return { deployer, alice, bob, carol, dave, treasuryOwner, oracle, treasury, groups, resolvers, book };
+  // Everyone starts with test money and a standing allowance, which is what the
+  // app arranges for a new account.
+  const bookAddress = await book.getAddress();
+  for (const who of [alice, bob, carol, dave]) {
+    await token.mint(who.address, usd(10_000));
+    await token.connect(who).approve(bookAddress, ethers.MaxUint256);
+  }
+
+  return { deployer, alice, bob, carol, dave, treasuryOwner, oracle, treasury, groups, resolvers, book, token };
 }
 
 async function defaultParams(overrides = {}) {
@@ -63,15 +76,15 @@ async function createWager(book, creator, overrides = {}) {
   return { id: event.args.wagerId, params };
 }
 
-const entry = (params) => params.stake + params.bond;
+
 
 describe("WagerBook lifecycle", function () {
   it("settles by unanimous attestation, pays the winner and takes a 1% fee", async function () {
-    const { alice, bob, book, treasury } = await deployStack();
+    const { alice, bob, book, treasury, token } = await deployStack();
     const { id, params } = await createWager(book, alice);
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
     expect((await book.getWager(id)).status).to.equal(Status.Locked);
 
     await time.increaseTo(params.eventDeadline);
@@ -88,7 +101,9 @@ describe("WagerBook lifecycle", function () {
     expect(await book.credits(bob.address)).to.equal(BOND);
     expect(await book.credits(await treasury.getAddress())).to.equal(fee);
 
-    await expect(book.connect(alice).withdraw()).to.changeEtherBalance(alice, pot - fee + BOND);
+    const before = await token.balanceOf(alice.address);
+    await book.connect(alice).withdraw();
+    expect(await token.balanceOf(alice.address)).to.equal(before + pot - fee + BOND);
     expect(await book.credits(alice.address)).to.equal(0);
     await expect(book.connect(alice).withdraw()).to.be.revertedWith("nothing to withdraw");
   });
@@ -97,8 +112,8 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, book, treasury } = await deployStack();
     const { id, params } = await createWager(book, alice, { ownerSplitBps: 5000 });
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
     await time.increaseTo(params.eventDeadline);
     await book.connect(alice).attest(id, 1);
     await book.connect(bob).attest(id, 1);
@@ -113,8 +128,8 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, book } = await deployStack();
     const { id, params } = await createWager(book, alice);
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
 
     // Concede is available as soon as the wager locks.
     await book.connect(bob).concede(id);
@@ -133,11 +148,11 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, carol, dave, book, treasury } = await deployStack();
     const { id, params } = await createWager(book, alice, {
       maxParticipants: 4,
-      stake: ethers.parseEther("0.01"),
+      stake: usd(10),
     });
 
     for (const [who, s] of [[alice, 0], [bob, 0], [carol, 1], [dave, 1]]) {
-      await book.connect(who).join(id, s, { value: entry(params) });
+      await book.connect(who).join(id, s);
     }
 
     await time.increaseTo(params.eventDeadline);
@@ -165,8 +180,8 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, book, treasury } = await deployStack();
     const { id, params } = await createWager(book, alice);
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
 
     await time.increaseTo(params.eventDeadline);
     await book.connect(alice).attest(id, 0);
@@ -186,8 +201,8 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, book } = await deployStack();
     const { id, params } = await createWager(book, alice);
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
 
     await time.increaseTo(params.eventDeadline);
     await book.connect(alice).attest(id, 0); // Bob never shows up
@@ -202,8 +217,8 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, carol, oracle, book } = await deployStack();
     const { id, params } = await createWager(book, alice, { resolutionMethod: Resolution.Oracle });
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
     await time.increaseTo(params.eventDeadline);
 
     await expect(book.connect(carol).resolveByOracle(id, 1)).to.be.revertedWith("not a resolver");
@@ -219,8 +234,8 @@ describe("WagerBook lifecycle", function () {
     const { alice, bob, oracle, book } = await deployStack();
     const { id, params } = await createWager(book, alice);
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
+    await book.connect(bob).join(id, 1);
     await time.increaseTo(params.eventDeadline);
 
     await expect(book.connect(oracle).resolveByOracle(id, 0)).to.be.revertedWith("not an oracle wager");
@@ -230,10 +245,10 @@ describe("WagerBook lifecycle", function () {
     const { alice, book } = await deployStack();
     const { id, params } = await createWager(book, alice);
 
-    await book.connect(alice).join(id, 0, { value: entry(params) });
+    await book.connect(alice).join(id, 0);
     await time.increaseTo(params.fundingDeadline + 1);
 
-    await expect(book.connect(alice).join(id, 1, { value: entry(params) })).to.be.revertedWith("funding closed");
+    await expect(book.connect(alice).join(id, 1)).to.be.revertedWith("funding closed");
     await book.cancel(id);
 
     expect((await book.getWager(id)).status).to.equal(Status.Cancelled);
@@ -245,13 +260,12 @@ describe("WagerBook lifecycle", function () {
       const { alice, bob, book } = await deployStack();
       const { id, params } = await createWager(book, alice);
 
-      await expect(book.connect(alice).join(id, 0, { value: STAKE })).to.be.revertedWith("incorrect value");
-      await expect(book.connect(alice).join(id, 2, { value: entry(params) })).to.be.revertedWith("invalid side");
+      await expect(book.connect(alice).join(id, 2)).to.be.revertedWith("invalid side");
 
-      await book.connect(alice).join(id, 0, { value: entry(params) });
-      await expect(book.connect(alice).join(id, 1, { value: entry(params) })).to.be.revertedWith("already joined");
+      await book.connect(alice).join(id, 0);
+      await expect(book.connect(alice).join(id, 1)).to.be.revertedWith("already joined");
 
-      await book.connect(bob).join(id, 1, { value: entry(params) });
+      await book.connect(bob).join(id, 1);
       await expect(book.connect(bob).concede(id)).to.not.be.reverted;
     });
 
@@ -259,8 +273,8 @@ describe("WagerBook lifecycle", function () {
       const { alice, bob, carol, book } = await deployStack();
       const { id, params } = await createWager(book, alice);
 
-      await book.connect(alice).join(id, 0, { value: entry(params) });
-      await book.connect(bob).join(id, 1, { value: entry(params) });
+      await book.connect(alice).join(id, 0);
+      await book.connect(bob).join(id, 1);
       await time.increaseTo(params.eventDeadline);
 
       await expect(book.connect(carol).attest(id, 0)).to.be.revertedWith("not participant");
@@ -272,8 +286,8 @@ describe("WagerBook lifecycle", function () {
       const { alice, bob, book } = await deployStack();
       const { id, params } = await createWager(book, alice);
 
-      await book.connect(alice).join(id, 0, { value: entry(params) });
-      await book.connect(bob).join(id, 1, { value: entry(params) });
+      await book.connect(alice).join(id, 0);
+      await book.connect(bob).join(id, 1);
 
       await expect(book.connect(alice).attest(id, 0)).to.be.revertedWith("event not over");
       await time.increaseTo(params.resolutionDeadline + 1);
@@ -284,9 +298,33 @@ describe("WagerBook lifecycle", function () {
       const { alice, bob, book } = await deployStack();
       const { id, params } = await createWager(book, alice, { maxParticipants: 4 });
 
-      await book.connect(alice).join(id, 0, { value: entry(params) });
-      await book.connect(bob).join(id, 0, { value: entry(params) });
+      await book.connect(alice).join(id, 0);
+      await book.connect(bob).join(id, 0);
       await expect(book.connect(alice).lock(id)).to.be.revertedWith("both sides required");
+    });
+
+    it("refuses to join without an allowance, and holds the escrow itself", async function () {
+      const { alice, bob, carol, book, token } = await deployStack();
+      const { id } = await createWager(book, alice);
+
+      // Carol revokes her allowance; the token, not the book, rejects her.
+      await token.connect(carol).approve(await book.getAddress(), 0);
+      await expect(book.connect(carol).join(id, 0)).to.be.revertedWith("insufficient allowance");
+
+      await book.connect(alice).join(id, 0);
+      await book.connect(bob).join(id, 1);
+
+      // Stakes and bonds sit in the contract until settlement, not with anyone.
+      expect(await token.balanceOf(await book.getAddress())).to.equal((STAKE + BOND) * 2n);
+    });
+
+    it("cannot join with more test money than the account holds", async function () {
+      const { alice, deployer, book, token } = await deployStack();
+      const { id } = await createWager(book, alice, { stake: usd(100) });
+
+      // Drain Alice, keeping the allowance in place.
+      await token.connect(alice).transfer(deployer.address, await token.balanceOf(alice.address));
+      await expect(book.connect(alice).join(id, 0)).to.be.revertedWith("insufficient balance");
     });
 
     it("keeps wagers isolated from one another", async function () {
@@ -294,10 +332,10 @@ describe("WagerBook lifecycle", function () {
       const a = await createWager(book, alice);
       const b = await createWager(book, carol);
 
-      await book.connect(alice).join(a.id, 0, { value: entry(a.params) });
-      await book.connect(bob).join(a.id, 1, { value: entry(a.params) });
-      await book.connect(carol).join(b.id, 0, { value: entry(b.params) });
-      await book.connect(dave).join(b.id, 1, { value: entry(b.params) });
+      await book.connect(alice).join(a.id, 0);
+      await book.connect(bob).join(a.id, 1);
+      await book.connect(carol).join(b.id, 0);
+      await book.connect(dave).join(b.id, 1);
 
       // Resolving one must not touch the other.
       await time.increaseTo(a.params.eventDeadline);
@@ -313,13 +351,13 @@ describe("WagerBook lifecycle", function () {
     });
 
     it("collects winnings from several wagers in one withdrawal", async function () {
-      const { alice, bob, book } = await deployStack();
+      const { alice, bob, book, token } = await deployStack();
       const a = await createWager(book, alice);
       const b = await createWager(book, alice);
 
       for (const w of [a, b]) {
-        await book.connect(alice).join(w.id, 0, { value: entry(w.params) });
-        await book.connect(bob).join(w.id, 1, { value: entry(w.params) });
+        await book.connect(alice).join(w.id, 0);
+        await book.connect(bob).join(w.id, 1);
       }
 
       await time.increaseTo(a.params.eventDeadline);
@@ -332,7 +370,9 @@ describe("WagerBook lifecycle", function () {
       const perWager = STAKE * 2n - fee + BOND;
       // Credits are global, so one passkey prompt claims both.
       expect(await book.credits(alice.address)).to.equal(perWager * 2n);
-      await expect(book.connect(alice).withdraw()).to.changeEtherBalance(alice, perWager * 2n);
+      const before = await token.balanceOf(alice.address);
+      await book.connect(alice).withdraw();
+      expect(await token.balanceOf(alice.address)).to.equal(before + perWager * 2n);
     });
   });
 });
@@ -341,12 +381,11 @@ describe("WagerBook limits and indexes", function () {
   it("enforces per-person stake and total pot limits", async function () {
     const { alice, book } = await deployStack();
 
-    await expect(createWager(book, alice, { stake: ethers.parseEther("0.2") })).to.be.revertedWith(
-      "stake above limit"
+    await expect(createWager(book, alice, { stake: usd(200) })).to.be.revertedWith("stake above limit");
+    // At the per-person ceiling, six participants still overshoot the pot cap.
+    await expect(createWager(book, alice, { stake: usd(100), maxParticipants: 6 })).to.be.revertedWith(
+      "pot above limit"
     );
-    await expect(
-      createWager(book, alice, { stake: ethers.parseEther("0.1"), maxParticipants: 6 })
-    ).to.be.revertedWith("pot above limit");
   });
 
   it("caps how long an attestation window may stay open", async function () {
@@ -365,7 +404,7 @@ describe("WagerBook limits and indexes", function () {
     await groups.connect(alice).addMember(1, bob.address);
 
     const { id, params } = await createWager(book, alice, { groupId: 1 });
-    await book.connect(bob).join(id, 1, { value: entry(params) });
+    await book.connect(bob).join(id, 1);
 
     expect(await book.wagerCount()).to.equal(1);
     expect(await book.getWagersByCreator(alice.address)).to.deep.equal([id]);
@@ -382,7 +421,7 @@ describe("WagerBook limits and indexes", function () {
 
   it("applies a group's stake limit on top of the protocol limit", async function () {
     const { alice, book, groups } = await deployStack();
-    await groups.connect(alice).createGroup(ethers.ZeroHash, ethers.parseEther("0.01"), 0);
+    await groups.connect(alice).createGroup(ethers.ZeroHash, usd(10), 0);
 
     await expect(createWager(book, alice, { groupId: 1 })).to.be.revertedWith("stake above group limit");
   });
@@ -390,7 +429,7 @@ describe("WagerBook limits and indexes", function () {
   it("only lets the owner change protocol limits", async function () {
     const { alice, deployer, book } = await deployStack();
     await expect(book.connect(alice).setLimits(1, 2, 50)).to.be.revertedWith("not owner");
-    await book.connect(deployer).setLimits(ethers.parseEther("1"), ethers.parseEther("5"), 50);
+    await book.connect(deployer).setLimits(usd(1000), usd(5000), 50);
     expect(await book.feeBps()).to.equal(50);
     await expect(book.connect(deployer).setLimits(1, 2, 2000)).to.be.revertedWith("fee above 10%");
   });

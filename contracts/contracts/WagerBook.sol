@@ -8,8 +8,19 @@ interface IResolverRegistry {
     function isResolver(address account) external view returns (bool);
 }
 
+interface IERC20 {
+    function transfer(address to, uint256 value) external returns (bool);
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
 /// @title WagerBook
 /// @notice Every friendly wager, held in one contract and keyed by id.
+/// @dev Stakes are denominated in an ERC-20 dollar token — test dollars on
+///      testnet, USDC on mainnet — not the native token. A wager that says "$25"
+///      has to still be $25 when it settles, and pricing it in ETH at a fixed
+///      rate meant the stake drifted with the market.
+///
 /// @dev Replaces the earlier design of deploying a `Wager` contract per wager.
 ///      That cost ~2,000,000 gas each — 90% of it re-storing identical bytecode —
 ///      and, more importantly, gave every wager a fresh address. Paymasters
@@ -102,6 +113,9 @@ contract WagerBook is Owned {
     address public resolverRegistry;
     GroupRegistry public groupRegistry;
 
+    /// @notice The dollar token every wager is denominated in.
+    IERC20 public immutable token;
+
     /// @notice Protocol fee taken from the pot on settlement (100 bps = 1%).
     uint16 public feeBps = 100;
     uint256 public maxStakeWei;
@@ -133,13 +147,16 @@ contract WagerBook is Owned {
 
     constructor(
         address _owner,
+        address _token,
         address _treasury,
         address _groupRegistry,
         address _resolverRegistry,
         uint256 _maxStakeWei,
         uint256 _maxPotWei
     ) Owned(_owner) {
+        require(_token != address(0), "token required");
         require(_treasury != address(0), "treasury required");
+        token = IERC20(_token);
         treasury = _treasury;
         groupRegistry = GroupRegistry(_groupRegistry);
         resolverRegistry = _resolverRegistry;
@@ -229,14 +246,19 @@ contract WagerBook is Owned {
     // -------------------------------------------------------------- funding
 
     /// @notice Join wager `id` on `_side` by escrowing stake + resolution bond.
-    function join(uint256 id, uint8 _side) external payable {
+    /// @dev Requires an allowance for stake + bond. The client batches the
+    ///      approval and this call into one EIP-5792 request, so the user still
+    ///      sees a single prompt.
+    function join(uint256 id, uint8 _side) external {
         Wager storage w = wagers[id];
         require(w.status == Status.Open, "not open");
         require(block.timestamp <= w.fundingDeadline, "funding closed");
         require(!joined[id][msg.sender], "already joined");
         require(_side < 2, "invalid side");
-        require(msg.value == uint256(w.stake) + uint256(w.bond), "incorrect value");
         require(participants[id].length < w.maxParticipants, "wager full");
+
+        uint256 owed = uint256(w.stake) + uint256(w.bond);
+        require(token.transferFrom(msg.sender, address(this), owed), "transfer failed");
 
         joined[id][msg.sender] = true;
         side[id][msg.sender] = _side;
@@ -454,8 +476,7 @@ contract WagerBook is Owned {
         uint256 amount = credits[msg.sender];
         require(amount > 0, "nothing to withdraw");
         credits[msg.sender] = 0;
-        (bool ok, ) = payable(msg.sender).call{value: amount}("");
-        require(ok, "transfer failed");
+        require(token.transfer(msg.sender, amount), "transfer failed");
         emit Withdrawn(msg.sender, amount);
         return amount;
     }

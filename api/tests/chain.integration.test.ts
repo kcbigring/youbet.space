@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { artifact, hashTerms } from "../src/lib/chain";
-import { centsToWei } from "../src/lib/money";
+import { centsToUnits } from "../src/lib/money";
 
 /// Exercises the seam between the API and the deployed contracts: artifact
 /// loading, parameter encoding, event decoding and state reads. Runs against a
@@ -66,8 +66,8 @@ describe("API to contract integration", () => {
       {
         groupId: 0,
         termsHash: ethers.ZeroHash,
-        stake: centsToWei(2500),
-        bond: centsToWei(100),
+        stake: centsToUnits(2500),
+        bond: centsToUnits(100),
         ownerSplitBps: 0,
         attestationThresholdBps: 5000,
         fundingDeadline: 1,
@@ -117,8 +117,8 @@ describe("API to contract integration", () => {
         await treasury.getAddress(),
         await groups.getAddress(),
         await resolvers.getAddress(),
-        centsToWei(10_000),
-        centsToWei(50_000),
+        centsToUnits(10_000),
+        centsToUnits(50_000),
       ]);
 
       const bookAddress = await book.getAddress();
@@ -138,8 +138,8 @@ describe("API to contract integration", () => {
           resolutionDeadline: new Date((now + 3660) * 1000),
           thresholdBps: 5000,
         }),
-        stake: centsToWei(stakeCents),
-        bond: centsToWei(bondCents),
+        stake: centsToUnits(stakeCents),
+        bond: centsToUnits(bondCents),
         ownerSplitBps: 0,
         attestationThresholdBps: 5000,
         fundingDeadline: now + 50,
@@ -164,7 +164,7 @@ describe("API to contract integration", () => {
       expect(wagerId).toBe(1n);
 
       const abi = artifact("WagerBook").abi;
-      const value = centsToWei(stakeCents) + centsToWei(bondCents);
+      const value = centsToUnits(stakeCents) + centsToUnits(bondCents);
       await (await new ethers.Contract(bookAddress, abi, alice).join(wagerId, 0, { value })).wait();
       await (await new ethers.Contract(bookAddress, abi, bob).join(wagerId, 1, { value })).wait();
 
@@ -184,10 +184,10 @@ describe("API to contract integration", () => {
       expect(Number(settled[0])).toBe(3); // Settled
       expect(Number(settled[1])).toBe(0); // side 0 won
 
-      const pot = centsToWei(stakeCents) * 2n;
+      const pot = centsToUnits(stakeCents) * 2n;
       const fee = (pot * 100n) / 10_000n;
       const credits = await new ethers.Contract(bookAddress, abi, provider).credits(alice.address);
-      expect(credits).toBe(pot - fee + centsToWei(bondCents));
+      expect(credits).toBe(pot - fee + centsToUnits(bondCents));
 
       const before = await provider.getBalance(alice.address);
       await (await new ethers.Contract(bookAddress, abi, alice).withdraw()).wait();

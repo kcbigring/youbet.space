@@ -7,7 +7,7 @@ import { asyncHandler, parseBody } from "../lib/http";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { parseWager } from "../lib/parse";
-import { centsToWei, formatUsd, weiToCents } from "../lib/money";
+import { centsToUnits, formatUsd, unitsToCents } from "../lib/money";
 import { artifact, getBook, hashTerms, readWagerParticipants, readWagerState } from "../lib/chain";
 import { ethers } from "ethers";
 import { monthlyVolumeCents } from "../lib/reputation";
@@ -170,8 +170,8 @@ router.post(
         params: {
           groupId: String(group?.onchainId ?? 0),
           termsHash,
-          stake: centsToWei(body.stakeCents).toString(),
-          bond: centsToWei(bondCents).toString(),
+          stake: centsToUnits(body.stakeCents).toString(),
+          bond: centsToUnits(bondCents).toString(),
           ownerSplitBps: body.ownerSplitBps ?? 0,
           attestationThresholdBps: thresholdBps,
           fundingDeadline: Math.floor(fundingDeadline.getTime() / 1000),
@@ -335,18 +335,28 @@ router.post(
       create: { wagerId: wager.id, userId, side, state: "INVITED" },
     });
 
-    res.json({ ok: true, call: joinCall(wager.onchainId, side, wager.stakeCents, wager.bondCents) });
+    res.json({ ok: true, calls: joinCalls(wager.onchainId, side, wager.stakeCents, wager.bondCents) });
   })
 );
 
-/// The calldata for `join(wagerId, side)` plus the stake and bond it must carry.
-function joinCall(onchainId: number, side: number, stakeCents: number, bondCents: number) {
-  const iface = new ethers.Interface(artifact("WagerBook").abi);
-  return {
-    to: env.wagerBookAddress,
-    data: iface.encodeFunctionData("join", [onchainId, side]),
-    value: (centsToWei(stakeCents) + centsToWei(bondCents)).toString(),
-  };
+/// Approving the stake and joining, as one batch. EIP-5792 lets the wallet send
+/// both in a single request, so an ERC-20 stake still costs the user one prompt
+/// rather than the two that approve-then-transfer normally implies.
+function joinCalls(onchainId: number, side: number, stakeCents: number, bondCents: number) {
+  const book = new ethers.Interface(artifact("WagerBook").abi);
+  const token = new ethers.Interface(artifact("TestUSD").abi);
+  const owed = centsToUnits(stakeCents) + centsToUnits(bondCents);
+
+  return [
+    {
+      to: env.stakeTokenAddress,
+      data: token.encodeFunctionData("approve", [env.wagerBookAddress, owed]),
+    },
+    {
+      to: env.wagerBookAddress,
+      data: book.encodeFunctionData("join", [onchainId, side]),
+    },
+  ];
 }
 
 router.post(
