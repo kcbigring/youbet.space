@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="44" fill="#0b0d12"/>
-  <path d="M52 58h22l22 38 22-38h22l-33 56v28h-22v-28z" fill="#4ade80"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="youbet">
+  <title>youbet</title>
+  <!-- A Y built from two separate arms meeting in one stem: two sides of a bet,
+       one settlement. The arms are deliberately unequal in tone — they are
+       opposing positions, not a symmetric ornament. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="13">
+    <path d="M26 24 L50 53" stroke="#4ade80" />
+    <path d="M74 24 L50 53" stroke="#1c7a4d" />
+    <path d="M50 53 L50 79" stroke="#4ade80" />
+  </g>
 </svg>

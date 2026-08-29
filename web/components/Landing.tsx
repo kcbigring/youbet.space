@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "./Logo";
 
 /// The public front door. Someone arriving from a friend's text has no idea what
 /// this is, and the honest pitch is short: it is the bet you already make,
@@ -27,9 +28,7 @@ export function Landing() {
   return (
     <div className="landing">
       <header className="landing-nav">
-        <span className="brand">
-          youbet<span>.space</span>
-        </span>
+        <Logo size={24} />
         <Link href="/signin" className="landing-nav-cta">
           Sign in
         </Link>
@@ -155,9 +154,7 @@ export function Landing() {
       </section>
 
       <footer className="landing-footer">
-        <span>
-          youbet<span>.space</span>
-        </span>
+        <Logo size={18} />
         <span className="landing-note">Currently running on test funds with invited groups.</span>
       </footer>
     </div>

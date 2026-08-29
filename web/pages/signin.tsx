@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import { api, setToken, ApiError } from "../lib/api";
 import { Banner } from "../components/Layout";
+import { Logo } from "../components/Logo";
 import {
   confirmVerificationCode,
   phoneVerificationAvailable,
@@ -106,8 +107,8 @@ export default function SignIn() {
   return (
     <div className="shell">
       <div style={{ paddingTop: 72, maxWidth: 380, margin: "0 auto" }}>
-        <div className="brand" style={{ fontSize: 28, marginBottom: 8 }}>
-          youbet<span>.space</span>
+        <div style={{ marginBottom: 10 }}>
+          <Logo size={30} />
         </div>
         <p className="muted" style={{ marginTop: 0, marginBottom: 32 }}>
           Private wagers between friends. Challenge, fund, resolve, settle.

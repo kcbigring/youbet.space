@@ -9,6 +9,9 @@
   --text: #eef1f7;
   --muted: #8b94a8;
   --accent: #4ade80;
+  /* The mark's second arm: same hue, lower key, so the two sides read as
+     opposing positions rather than a gradient. */
+  --accent-deep: #1c7a4d;
   --accent-dim: #14532d;
   --danger: #f87171;
   --warn: #fbbf24;
@@ -55,6 +58,22 @@ a { color: inherit; text-decoration: none; }
 
 .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 18px; }
 .brand span { color: var(--accent); }
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.logo-word {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.logo-word span { color: var(--accent); }
 
 h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0 0 4px; }
 h2 { font-size: 17px; margin: 28px 0 12px; letter-spacing: -0.01em; }

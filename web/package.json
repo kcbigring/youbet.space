@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "og": "node scripts/og.mjs"
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",

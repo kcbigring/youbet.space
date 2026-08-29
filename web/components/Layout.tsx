@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
+import { Logo } from "./Logo";
 
 const TABS = [
   { href: "/", glyph: "◎", label: "Home" },
@@ -15,8 +16,8 @@ export function Layout({ children, title }: { children: ReactNode; title?: strin
   return (
     <div className="shell">
       <header className="topbar">
-        <Link href="/" className="brand">
-          youbet<span>.space</span>
+        <Link href="/" aria-label="youbet.space home">
+          <Logo size={20} />
         </Link>
         {title && <span className="small muted">{title}</span>}
       </header>
