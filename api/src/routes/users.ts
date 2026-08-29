@@ -5,6 +5,7 @@ import { asyncHandler } from "../lib/http";
 import { notFound } from "../lib/errors";
 import { authenticate, type AuthedRequest } from "../lib/auth";
 import { reputationFor, monthlyVolumeCents } from "../lib/reputation";
+import { standingFor, TIERS } from "../lib/standing";
 import { contractAt } from "../lib/chain";
 import { unitsToCents } from "../lib/money";
 import { env } from "../env";
@@ -73,9 +74,16 @@ router.get(
 router.get(
   "/me/reputation",
   asyncHandler(async (req: AuthedRequest, res) => {
-    res.json({ ok: true, reputation: await reputationFor(req.userId!) });
+    const reputation = await reputationFor(req.userId!);
+    res.json({ ok: true, reputation, standing: standingFor(reputation) });
   })
 );
+
+/// Every tier and what it takes, so the app can show someone what is ahead
+/// rather than only what they currently have.
+router.get("/tiers", (_req, res) => {
+  res.json({ ok: true, tiers: TIERS });
+});
 
 router.get(
   "/:id/reputation",

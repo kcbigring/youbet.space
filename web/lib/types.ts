@@ -65,6 +65,28 @@ export interface Reputation {
   pendingAttestations: number;
 }
 
+export interface Tier {
+  key: string;
+  name: string;
+  blurb: string;
+  maxStakeCents: number;
+  openWagers: number;
+  invitesPerDay: number;
+  canCreateGroups: boolean;
+}
+
+export interface Standing {
+  tier: Tier;
+  next: Tier | null;
+  toNext: { settled: number; attestation: number | null } | null;
+  limits: {
+    maxStakeCents: number;
+    openWagers: number;
+    invitesPerDay: number;
+    canCreateGroups: boolean;
+  };
+}
+
 export interface ParsedWager {
   proposition: string;
   sideLabels: [string, string];

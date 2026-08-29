@@ -7,6 +7,7 @@ import { asyncHandler, parseBody } from "../lib/http";
 import { badRequest, forbidden, notFound } from "../lib/errors";
 import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { reputationFor } from "../lib/reputation";
+import { standingFor } from "../lib/standing";
 
 const router = Router();
 router.use(authenticate);
@@ -40,6 +41,14 @@ router.post(
   "/",
   asyncHandler(async (req: AuthedRequest, res) => {
     const body = parseBody(createSchema, req);
+
+    // Starting a group is earned, so a brand-new account cannot spin up groups
+    // to farm invites.
+    const standing = standingFor(await reputationFor(req.userId!));
+    if (!standing.limits.canCreateGroups) {
+      throw forbidden("Settle a few bets first — starting your own group unlocks at Regular.");
+    }
+
     const group = await prisma.group.create({
       data: {
         ...body,

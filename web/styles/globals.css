@@ -14,6 +14,8 @@
   --warn: #fbbf24;
   --radius: 14px;
   --max: 560px;
+  /* Display face for headlines. The app itself stays on the system stack. */
+  --display: Archivo, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -233,4 +235,235 @@ button.small { padding: 8px 12px; font-size: 13px; }
 @keyframes shimmer {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
+}
+
+/* ---------------------------------------------------------------- landing
+   The public page, for someone who has never heard of this. It uses the app's
+   palette so arriving inside is not a jolt, but sets its own type scale: the
+   app is scanned, this is read. Archivo carries the headlines because it is
+   confident and a little sporting without being loud. */
+
+.landing {
+  --measure: 34rem;
+  max-width: 100%;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 22px 24px;
+}
+
+.landing-nav-cta {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.landing-nav-cta:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.landing-hero {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 72px 24px 64px;
+}
+
+.landing-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 20px;
+}
+
+.landing h1 {
+  font-family: var(--display);
+  font-size: clamp(2.6rem, 7vw, 4.4rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  margin: 0 0 24px;
+}
+
+.landing h1 span {
+  display: block;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.landing-lede {
+  max-width: var(--measure);
+  font-size: 1.15rem;
+  color: var(--muted);
+  margin: 0 0 32px;
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.landing-actions button {
+  font-size: 16px;
+  padding: 14px 26px;
+}
+
+.landing-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.landing-section {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 56px 24px;
+  border-top: 1px solid var(--border);
+}
+
+.landing-h2 {
+  font-family: var(--display);
+  font-size: clamp(1.6rem, 3.4vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  margin: 0 0 28px;
+}
+
+.landing-body {
+  max-width: var(--measure);
+  color: var(--muted);
+  margin: 0 0 18px;
+}
+
+/* The steps are a real sequence, so they are numbered. */
+.landing-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.landing-steps li {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.landing-step-num {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  background: rgba(74, 222, 128, 0.07);
+}
+
+.landing-steps h3 {
+  font-size: 1.02rem;
+  font-weight: 650;
+  margin: 4px 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.landing-steps p {
+  margin: 0;
+  color: var(--muted);
+  max-width: var(--measure);
+}
+
+.landing-bond {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  max-width: none;
+}
+
+.landing-bond > * {
+  max-width: 46rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.landing-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+
+.landing-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.landing-card h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+
+.landing-card p {
+  margin: 0;
+  font-size: 0.94rem;
+  color: var(--muted);
+}
+
+.landing-close button {
+  font-size: 16px;
+  padding: 14px 26px;
+  margin-top: 8px;
+}
+
+.landing-footer {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.landing-footer > span span {
+  color: var(--accent);
+}
+
+@media (min-width: 720px) {
+  .landing-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .landing-hero {
+    padding-top: 104px;
+  }
 }

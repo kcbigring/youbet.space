@@ -10,7 +10,8 @@ import { parseWager } from "../lib/parse";
 import { centsToUnits, formatUsd, unitsToCents } from "../lib/money";
 import { artifact, getBook, hashTerms, readWagerParticipants, readWagerState } from "../lib/chain";
 import { ethers } from "ethers";
-import { monthlyVolumeCents } from "../lib/reputation";
+import { monthlyVolumeCents, reputationFor } from "../lib/reputation";
+import { standingFor } from "../lib/standing";
 
 const router = Router();
 router.use(authenticate);
@@ -87,12 +88,33 @@ router.post(
       group = membership.group;
     }
 
-    const maxStake = Math.min(env.maxStakeCents, group?.maxStakeCents ?? env.maxStakeCents);
+    // Standing sets a personal ceiling at or below the protocol cap — a new
+    // account starts low and earns its way up, rather than unlocking past it.
+    const standing = standingFor(await reputationFor(userId));
+    const maxStake = Math.min(
+      env.maxStakeCents,
+      standing.limits.maxStakeCents,
+      group?.maxStakeCents ?? env.maxStakeCents
+    );
     const maxPot = Math.min(env.maxPotCents, group?.maxPotCents ?? env.maxPotCents);
     const monthlyLimit = Math.min(env.monthlyLimitCents, group?.monthlyLimitCents ?? env.monthlyLimitCents);
 
     if (body.stakeCents > maxStake) {
-      throw badRequest(`Stake is above the ${formatUsd(maxStake)} limit per person`);
+      const personal = standing.limits.maxStakeCents < (group?.maxStakeCents ?? env.maxStakeCents);
+      throw badRequest(
+        personal
+          ? `Your limit is ${formatUsd(maxStake)} a wager right now. Settle a few more and it goes up.`
+          : `Stake is above the ${formatUsd(maxStake)} limit per person`
+      );
+    }
+
+    const open = await prisma.wagerParticipant.count({
+      where: { userId, state: "JOINED", wager: { status: { in: ["OPEN", "LOCKED"] } } },
+    });
+    if (open >= standing.limits.openWagers) {
+      throw badRequest(
+        `You have ${open} bets running, which is your limit for now. Settle some and this opens up.`
+      );
     }
     const pot = body.stakeCents * body.maxParticipants;
     if (pot > maxPot) throw badRequest(`Total pot is above the ${formatUsd(maxPot)} limit`);
@@ -322,6 +344,20 @@ router.post(
     if (env.requireVerifiedPhone) {
       const me = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
       if (!me.phoneVerified) throw forbidden("Verify your phone number before funding a wager");
+    }
+
+    const standing = standingFor(await reputationFor(userId));
+    if (wager.stakeCents > standing.limits.maxStakeCents) {
+      throw badRequest(
+        `This bet is above your ${formatUsd(standing.limits.maxStakeCents)} limit right now. Settle a few more and it goes up.`
+      );
+    }
+
+    const open = await prisma.wagerParticipant.count({
+      where: { userId, state: "JOINED", wager: { status: { in: ["OPEN", "LOCKED"] } } },
+    });
+    if (open >= standing.limits.openWagers) {
+      throw badRequest(`You have ${open} bets running, which is your limit for now.`);
     }
 
     const committed = await monthlyVolumeCents(userId);

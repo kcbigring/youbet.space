@@ -5,6 +5,7 @@ import { useSession } from "../lib/useSession";
 import type { Wager, Reputation } from "../lib/types";
 import { Layout, Empty, Banner } from "../components/Layout";
 import { WagerCard } from "../components/WagerCard";
+import { Landing } from "../components/Landing";
 
 interface Feed {
   pending: Wager[];
@@ -14,7 +15,9 @@ interface Feed {
 }
 
 export default function Home() {
-  const { user, loading } = useSession();
+  // Signed-out visitors get the pitch rather than a sign-in form. Someone
+  // arriving from a friend's link has no idea what this is yet.
+  const { user, loading, hasToken } = useSession({ redirect: false });
   const [feed, setFeed] = useState<Feed | null>(null);
   const [rep, setRep] = useState<Reputation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +32,10 @@ export default function Home() {
       .catch((err) => setError(err.message));
   }, [user]);
 
-  if (loading || !user) {
+  // Only wait on the session when we know there is one to wait for. On the
+  // server hasToken is null, so the landing page is what gets rendered into the
+  // HTML — real markup for crawlers and link previews, rather than a skeleton.
+  if (loading && hasToken === true) {
     return (
       <Layout>
         <div className="stack">
@@ -39,6 +45,8 @@ export default function Home() {
       </Layout>
     );
   }
+
+  if (!user) return <Landing />;
 
   const empty =
     feed && !feed.pending.length && !feed.active.length && !feed.needsAttention.length && !feed.recent.length;

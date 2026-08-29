@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { api, usd, setToken } from "../lib/api";
 import { useSession } from "../lib/useSession";
-import type { Reputation } from "../lib/types";
+import type { Reputation, Standing as StandingType } from "../lib/types";
 import { Layout, Banner } from "../components/Layout";
 import { VerifyPhone } from "../components/VerifyPhone";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { TestMoney } from "../components/TestMoney";
+import { Standing } from "../components/Standing";
 
 interface Me {
   id: string;
@@ -32,6 +33,7 @@ export default function Wallet() {
   const { user, loading } = useSession();
   const [info, setInfo] = useState<WalletInfo | null>(null);
   const [rep, setRep] = useState<Reputation | null>(null);
+  const [standing, setStanding] = useState<StandingType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -39,11 +41,12 @@ export default function Wallet() {
     if (!user) return;
     Promise.all([
       api.get<WalletInfo>("/users/me/wallet"),
-      api.get<{ reputation: Reputation }>("/users/me/reputation"),
+      api.get<{ reputation: Reputation; standing: StandingType }>("/users/me/reputation"),
     ])
       .then(([w, r]) => {
         setInfo(w);
         setRep(r.reputation);
+        setStanding(r.standing);
       })
       .catch((err) => setError(err.message));
   }, [user]);
@@ -127,6 +130,13 @@ export default function Wallet() {
               {usd(info.limits.remainingCents)} left this month · max {usd(info.limits.maxStakeCents)} per wager
             </div>
           </div>
+        </>
+      )}
+
+      {standing && (
+        <>
+          <h2>Standing</h2>
+          <Standing standing={standing} />
         </>
       )}
 

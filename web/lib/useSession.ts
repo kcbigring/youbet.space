@@ -8,12 +8,22 @@ export function useSession({ redirect = true } = {}) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  /// Whether a session token exists at all, resolved on the very first client
+  /// render rather than after the fetch. Null on the server, which cannot see
+  /// localStorage — a page can treat that as "assume signed out" and serve real
+  /// markup to crawlers instead of a skeleton.
+  const [hasToken, setHasToken] = useState<boolean | null>(() =>
+    typeof window === "undefined" ? null : Boolean(getToken())
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      if (!getToken()) {
+      const token = getToken();
+      if (!cancelled) setHasToken(Boolean(token));
+
+      if (!token) {
         if (!cancelled) setLoading(false);
         if (redirect) router.replace(`/signin?next=${encodeURIComponent(router.asPath)}`);
         return;
@@ -37,5 +47,5 @@ export function useSession({ redirect = true } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redirect]);
 
-  return { user, loading };
+  return { user, loading, hasToken };
 }

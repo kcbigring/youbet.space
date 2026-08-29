@@ -19,6 +19,12 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="description" content="Private wagers between friends. Challenge, fund, resolve, settle." />
         <meta name="theme-color" content="#0b0d12" />
         <link rel="manifest" href="/manifest.json" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </Head>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
