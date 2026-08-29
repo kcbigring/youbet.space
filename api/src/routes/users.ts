@@ -5,7 +5,6 @@ import { asyncHandler } from "../lib/http";
 import { notFound } from "../lib/errors";
 import { authenticate, type AuthedRequest } from "../lib/auth";
 import { reputationFor, monthlyVolumeCents } from "../lib/reputation";
-import { addressFor } from "../lib/wallet";
 import { getProvider } from "../lib/chain";
 import { weiToCents } from "../lib/money";
 import { env } from "../env";
@@ -13,11 +12,27 @@ import { env } from "../env";
 const router = Router();
 router.use(authenticate);
 
-/// Wallet screen: balance, address and remaining monthly headroom.
+/// Wallet screen: balance, address and remaining monthly headroom. The address
+/// belongs to the user's own smart account — we only record it.
 router.get(
   "/me/wallet",
   asyncHandler(async (req: AuthedRequest, res) => {
-    const address = await addressFor(req.userId!);
+    const me = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } });
+    const address = me.walletAddress;
+
+    if (!address) {
+      return res.json({
+        ok: true,
+        wallet: null,
+        limits: {
+          monthlyLimitCents: env.monthlyLimitCents,
+          committedCents: await monthlyVolumeCents(req.userId!),
+          remainingCents: env.monthlyLimitCents,
+          maxStakeCents: env.maxStakeCents,
+          maxPotCents: env.maxPotCents,
+        },
+      });
+    }
 
     let balanceCents: number | null = null;
     let balanceWei = "0";

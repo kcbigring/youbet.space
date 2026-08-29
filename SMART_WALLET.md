@@ -1,52 +1,70 @@
-# Embedded wallets
+# Wallets
 
-Users should never see a seed phrase (§13 of the plan). What ships today, and
-what it costs.
+Users never see a seed phrase, and the platform never holds a key it could spend
+from. Both of those are true at once because wallets are **ERC-4337 smart
+accounts owned by a passkey**.
 
-## What is implemented
+## How it works
 
-Every user gets an EVM keypair on first use. The private key is encrypted with
-AES-256-GCM under `WALLET_ENCRYPTION_KEY` and stored in the `EmbeddedWallet`
-table. It is decrypted in memory only to sign a transaction and is never
-returned to a client. `api/src/lib/wallet.ts` is the only module that touches it.
+On first use the browser creates a passkey — Face ID, Touch ID, or a security
+key. That passkey is the owner of a smart contract account on Base. The private
+key lives in the device keychain (and syncs through iCloud Keychain or Google
+Password Manager); it never touches our servers.
 
-Gas is sponsored: before a user transaction, the relayer tops that wallet up by
-exactly the shortfall, capped by `MAX_GAS_TOPUP_ETH`. Users hold no native token
-and never fund gas themselves.
+Transactions go out as EIP-5792 batches through the Coinbase Smart Wallet
+connector. A paymaster sponsors gas, so users never hold the native token. A
+batch also means several actions can settle behind a single Face ID prompt.
 
-## Why the platform signs at all
+`api/src/routes/wagers.ts` returns *call descriptors* — `to`, `data`, `value` —
+rather than sending anything. The client signs and submits; the API then
+re-reads the chain. The server has no signing key for any user.
 
-On-chain attestation must come from the participant's own address — `attest()`
-and `concede()` check `msg.sender`. A relayer calling on someone's behalf would
-revert. So either the user holds a key, or the platform holds one for them. The
-plan says no seed phrases, so the platform holds it.
+## Why not a custodial key
 
-## What that means
+The first cut of this stored an encrypted private key per user, on the theory
+that the platform had to sign because `attest()` and `concede()` check
+`msg.sender`. That was true but the wrong conclusion: a smart account is just
+another `msg.sender`, so the contracts never needed to change.
 
-**This is custody of a signing key.** It is the single most sensitive thing in
-the system and it needs to be named plainly for the legal workstream in §19:
+That design would have meant:
 
-- `WALLET_ENCRYPTION_KEY` belongs in a KMS or secret manager, never in the repo
-  or an env file on disk. Losing it locks every user out of their funds.
-- Whoever can read the database *and* the key can move user funds. Those two
-  should not share a blast radius.
-- Stakes do not sit in these wallets. They go straight into the wager escrow and
-  pay out to participants. The exposure is the balance between a top-up and a
-  transaction, which is gas-sized.
+- losing one encryption key locks every user out of their funds, permanently;
+- anyone with the database *and* that key can move user money;
+- custody of a signing key, which is a live legal question (execution plan §19).
 
-## Where this should go
+The migration argument also ran backwards. Identity is keyed on phone number, so
+swapping *identity* providers is cheap — but swapping *wallets* means moving
+every user's funds or making them re-onboard. With zero users, removing custody
+cost an afternoon. With five hundred it would have been a project.
 
-ERC-4337 account abstraction with a passkey signer removes the custody question
-entirely: the user's device holds the key, a paymaster covers gas, and the
-platform keeps the same "no seed phrase" experience without holding anything.
-Base has good 4337 infrastructure. That is the right target before real money,
-and the contracts need no changes for it — a smart account is just another
-`msg.sender`.
+## What the chain decides
 
-Interim hardening, in order of value:
+Because the server cannot sign, it also cannot be trusted about who did what.
+`syncFromChain` reads `getParticipants()` and each participant's side,
+resolution and credits directly from the escrow and reconciles the database
+against it. A client claiming "I joined" proves nothing; the escrow holding
+their stake does.
 
-1. Move `WALLET_ENCRYPTION_KEY` to a KMS with per-user data keys, so a database
-   dump alone is inert.
-2. Cap what a single wallet can sign for in a window, independent of the
-   per-wager limits.
-3. Add social recovery so a user can rotate to a self-held key.
+Users are matched to on-chain activity through `User.walletAddress`, recorded
+when they connect. It is an identifier, not a credential.
+
+## Recovery
+
+A passkey that syncs through the platform keychain survives a lost device. One
+that does not is gone, and so is the account.
+
+Coinbase Smart Wallet accounts support multiple owners, which is the path to
+real recovery: add a second passkey on another device, or a trusted friend's
+account as a co-owner. Worth doing before real money — it is a contract-level
+feature, so it needs no changes here.
+
+## Configuration
+
+| Variable                     | Purpose                                              |
+| ---------------------------- | ---------------------------------------------------- |
+| `NEXT_PUBLIC_CHAIN_ID`       | 84532 for Base Sepolia, 8453 for Base mainnet.        |
+| `NEXT_PUBLIC_PAYMASTER_URL`  | Sponsors gas. Without it users pay their own.         |
+| `NEXT_PUBLIC_FACTORY_ADDRESS`| The deployed `WagerFactory`.                          |
+
+The relayer key (`DEPLOYER_PRIVATE_KEY`) still exists, but only to deploy the
+platform's own contracts. It never signs for a user.

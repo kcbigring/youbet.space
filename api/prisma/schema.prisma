@@ -45,6 +45,8 @@ model User {
   email         String?  @unique
   displayName   String?
   handle        String?  @unique
+  /// ERC-4337 smart-account address, owned by the user's passkey. We never hold
+  /// a key for it; this is how on-chain activity is mapped back to a person.
   walletAddress String?  @unique
   /// Signed in at least once. Says nothing about the phone being real.
   verified      Boolean  @default(false)
@@ -55,7 +57,6 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  wallet         EmbeddedWallet?
   sessions       Session[]
   memberships    GroupMember[]
   ownedGroups    Group[]            @relation("GroupOwner")
@@ -64,20 +65,6 @@ model User {
   comments       Comment[]
   notifications  Notification[]
   invitesSent    Invite[]           @relation("InviteSender")
-}
-
-/// Custodial signing key for a user's embedded wallet. The private key is stored
-/// encrypted with WALLET_ENCRYPTION_KEY and only ever decrypted in memory to sign a
-/// transaction, so participants never handle a seed phrase (execution plan §13).
-model EmbeddedWallet {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address      String   @unique
-  encryptedKey String
-  iv           String
-  authTag      String
-  createdAt    DateTime @default(now())
 }
 
 model Session {

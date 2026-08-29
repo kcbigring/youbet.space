@@ -24,6 +24,23 @@ for (const file of [
 const args = process.argv.slice(2);
 const isMigration = args[0] === "migrate" || args[0] === "db";
 
+// `migrate diff --from-migrations` RESETS whatever it is handed as a shadow
+// database. Pointing that at a real connection string wipes it. Generate
+// migrations with `npm run prisma:diff`, which introspects via --from-url and
+// never writes.
+const shadowFlag = args.findIndex((a) => a === "--shadow-database-url");
+if (shadowFlag !== -1) {
+  const target = args[shadowFlag + 1] || "";
+  const live = [process.env.DATABASE_URL, process.env.DIRECT_URL].filter(Boolean);
+  if (live.some((url) => url && target.includes(new URL(url).hostname))) {
+    console.error(
+      "Refusing to use a live database as a shadow database — it would be reset.\n" +
+        "Use `npm run prisma:diff` instead."
+    );
+    process.exit(1);
+  }
+}
+
 const env = { ...process.env };
 if (isMigration && env.DIRECT_URL) {
   env.DATABASE_URL = env.DIRECT_URL;

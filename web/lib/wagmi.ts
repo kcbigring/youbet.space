@@ -1,0 +1,46 @@
+import { createConfig, http, type Config } from "wagmi";
+import { base, baseSepolia } from "viem/chains";
+import { coinbaseWallet } from "wagmi/connectors";
+
+/// Wallets are ERC-4337 smart accounts owned by a passkey. The key lives in the
+/// user's device keychain, so the platform never holds it and there is no seed
+/// phrase to write down — which is what the execution plan asked for, without
+/// the custody the earlier custodial design implied.
+
+/// Both chains are registered so the deploy target is an env switch rather than
+/// a code change; `activeChain` is the one the app transacts on.
+export const activeChain =
+  Number(process.env.NEXT_PUBLIC_CHAIN_ID || baseSepolia.id) === base.id ? base : baseSepolia;
+
+export const config: Config = createConfig({
+  chains: [baseSepolia, base],
+  connectors: [
+    coinbaseWallet({
+      appName: "youbet.space",
+      // Force the smart-account flow: no browser extension, no seed phrase,
+      // a passkey is the only credential.
+      preference: { options: "smartWalletOnly" },
+    }),
+  ],
+  transports: {
+    [baseSepolia.id]: http(process.env.NEXT_PUBLIC_RPC_URL || undefined),
+    [base.id]: http(process.env.NEXT_PUBLIC_RPC_URL_MAINNET || undefined),
+  },
+  ssr: true,
+});
+
+/// Paymaster endpoint. When present, gas is sponsored and the user never needs
+/// to hold the native token.
+export const paymasterUrl = process.env.NEXT_PUBLIC_PAYMASTER_URL || undefined;
+
+/// EIP-5792 capabilities passed with every batch. An absent paymaster simply
+/// means the user pays their own gas rather than the call failing.
+export const callCapabilities = paymasterUrl
+  ? { paymasterService: { url: paymasterUrl } }
+  : undefined;
+
+declare module "wagmi" {
+  interface Register {
+    config: typeof config;
+  }
+}

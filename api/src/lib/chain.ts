@@ -87,6 +87,34 @@ export function hashTerms(terms: {
 const STATUS_BY_INDEX = ["OPEN", "LOCKED", "SETTLED", "REFUNDED", "CANCELLED"] as const;
 export type OnchainStatus = (typeof STATUS_BY_INDEX)[number];
 
+/// Full participant-level state. This is what makes the chain authoritative:
+/// the API mirrors it rather than trusting a client to report what it did.
+export async function readWagerParticipants(address: string) {
+  const wager = getWager(address);
+  const addresses: string[] = await wager.getParticipants();
+
+  return Promise.all(
+    addresses.map(async (participant) => {
+      const [side, hasResolved, resolutionChoice, conceded, credits] = await Promise.all([
+        wager.side(participant),
+        wager.hasResolved(participant),
+        wager.resolutionChoice(participant),
+        wager.conceded(participant),
+        wager.credits(participant),
+      ]);
+      return {
+        address: participant as string,
+        side: Number(side),
+        hasResolved: Boolean(hasResolved),
+        // The side they said won, which for a conceder is the opposite of theirs.
+        resolutionChoice: Number(resolutionChoice),
+        conceded: Boolean(conceded),
+        creditsWei: (credits as bigint).toString(),
+      };
+    })
+  );
+}
+
 export async function readWagerState(address: string) {
   const wager = getWager(address);
   const [status, winningSide, participants, pot, required, forSide0, forSide1] = await wager.summary();

@@ -6,7 +6,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:base": "hardhat run scripts/deploy.js --network base_sepolia",
-    "deploy:robinhood": "hardhat run scripts/deploy.js --network robinhood_testnet"
+    "deploy:robinhood": "hardhat run scripts/deploy.js --network robinhood_testnet",
+    "export-abi": "node scripts/export-abi.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

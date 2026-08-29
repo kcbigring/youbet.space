@@ -3,8 +3,12 @@ import { useRouter } from "next/router";
 import { api, usd, timeUntil, ApiError } from "../../lib/api";
 import { useSession } from "../../lib/useSession";
 import type { Wager } from "../../lib/types";
+import { encodeFunctionData } from "viem";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
+import { ConnectWallet } from "../../components/ConnectWallet";
+import { useWallet } from "../../lib/useWallet";
+import { wagerAbi } from "../../lib/abi";
 
 interface Comment {
   id: string;
@@ -33,6 +37,7 @@ export default function WagerDetail() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState("");
+  const wallet = useWallet();
 
   const load = useCallback(async () => {
     if (typeof id !== "string") return;
@@ -54,11 +59,39 @@ export default function WagerDetail() {
       await fn();
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "That did not go through");
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "That did not go through");
     } finally {
       setBusy(false);
     }
   }
+
+  /// Sends a call from the user's smart account, then asks the API to re-read
+  /// the chain. The API never signs, so the chain is what settles the record.
+  async function onChain(id: string, calls: Parameters<typeof wallet.send>[0]) {
+    await wallet.send(calls);
+    await api.post(`/wagers/${id}/sync`);
+  }
+
+  /// The API returns the exact call for joining, including the stake and bond
+  /// the escrow expects, so the amount is never guessed client-side.
+  async function join(id: string, side: number) {
+    const res = await api.post<{ call: { to: string; data: string; value: string } }>(
+      `/wagers/${id}/join`,
+      { side }
+    );
+    await onChain(id, [
+      {
+        to: res.call.to as `0x${string}`,
+        data: res.call.data as `0x${string}`,
+        value: BigInt(res.call.value),
+      },
+    ]);
+  }
+
+  const wagerCall = (address: string, fn: "attest" | "concede" | "withdraw", args: readonly unknown[] = []) => ({
+    to: address as `0x${string}`,
+    data: encodeFunctionData({ abi: wagerAbi, functionName: fn, args: args as never }),
+  });
 
   if (loading || !user || !detail) {
     return (
@@ -114,7 +147,17 @@ export default function WagerDetail() {
         })}
       </div>
 
-      {canJoin && (
+      {canJoin && !wallet.isConnected && (
+        <>
+          <h2>Take a side</h2>
+          <p className="small muted" style={{ marginTop: -4 }}>
+            You need a wallet to put money on this. It takes one tap.
+          </p>
+          <ConnectWallet />
+        </>
+      )}
+
+      {canJoin && wallet.isConnected && (
         <>
           <h2>Take a side</h2>
           <p className="small muted" style={{ marginTop: -4 }}>
@@ -126,15 +169,15 @@ export default function WagerDetail() {
               <button
                 key={index}
                 className="side-option"
-                disabled={busy}
-                onClick={() => act(() => api.post(`/wagers/${wager.id}/join`, { side: index }))}
+                disabled={busy || wallet.busy}
+                onClick={() => act(() => join(wager.id, index))}
               >
                 Back: {label}
               </button>
             ))}
             <button
               className="ghost block"
-              disabled={busy}
+              disabled={busy || wallet.busy}
               onClick={() => act(() => api.post(`/wagers/${wager.id}/decline`))}
             >
               Not this time
@@ -158,16 +201,18 @@ export default function WagerDetail() {
                 <button
                   key={index}
                   className="side-option"
-                  disabled={busy}
-                  onClick={() => act(() => api.post(`/wagers/${wager.id}/attest`, { winningSide: index }))}
+                  disabled={busy || wallet.busy}
+                  onClick={() =>
+                    act(() => onChain(wager.id, [wagerCall(wager.address!, "attest", [index])]))
+                  }
                 >
                   {label} won
                 </button>
               ))}
             <button
               className="ghost block"
-              disabled={busy}
-              onClick={() => act(() => api.post(`/wagers/${wager.id}/concede`))}
+              disabled={busy || wallet.busy}
+              onClick={() => act(() => onChain(wager.id, [wagerCall(wager.address!, "concede")]))}
             >
               I lost — pay them now
             </button>
@@ -202,8 +247,8 @@ export default function WagerDetail() {
         <button
           className="block"
           style={{ marginTop: 12 }}
-          disabled={busy}
-          onClick={() => act(() => api.post(`/wagers/${wager.id}/withdraw`))}
+          disabled={busy || wallet.busy}
+          onClick={() => act(() => onChain(wager.id, [wagerCall(wager.address!, "withdraw")]))}
         >
           Claim what you are owed
         </button>

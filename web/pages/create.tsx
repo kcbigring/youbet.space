@@ -3,7 +3,11 @@ import { useRouter } from "next/router";
 import { api, usd, ApiError } from "../lib/api";
 import { useSession } from "../lib/useSession";
 import type { Group, ParsedWager, Wager } from "../lib/types";
+import { encodeFunctionData } from "viem";
 import { Layout, Banner } from "../components/Layout";
+import { ConnectWallet } from "../components/ConnectWallet";
+import { useWallet } from "../lib/useWallet";
+import { wagerFactoryAbi } from "../lib/abi";
 
 const EXAMPLES = [
   "$25 each that Texas beats Ohio State",
@@ -36,6 +40,7 @@ export default function Create() {
   const [groupId, setGroupId] = useState("");
   const [deadline, setDeadline] = useState(toLocalInput(null));
   const [phones, setPhones] = useState("");
+  const wallet = useWallet();
 
   useEffect(() => {
     if (!user) return;
@@ -65,7 +70,10 @@ export default function Create() {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post<{ wager: Wager }>("/wagers", {
+      const res = await api.post<{
+        wager: Wager;
+        deploy: { factory: string | null; params: Record<string, string | number> };
+      }>("/wagers", {
         groupId: groupId || undefined,
         proposition,
         sideLabels: [sideA, sideB],
@@ -80,12 +88,47 @@ export default function Create() {
           .map((p) => p.trim())
           .filter(Boolean),
       });
+      // Deploy from the creator's own account so the contract's `creator` is
+      // them — that is who the owner fee split pays.
+      const { factory, params } = res.deploy;
+      if (factory && wallet.isConnected) {
+        const data = encodeFunctionData({
+          abi: wagerFactoryAbi,
+          functionName: "createWager",
+          args: [
+            {
+              groupId: BigInt(params.groupId),
+              termsHash: params.termsHash as `0x${string}`,
+              stake: BigInt(params.stake),
+              bond: BigInt(params.bond),
+              ownerSplitBps: BigInt(params.ownerSplitBps),
+              attestationThresholdBps: BigInt(params.attestationThresholdBps),
+              fundingDeadline: BigInt(params.fundingDeadline),
+              eventDeadline: BigInt(params.eventDeadline),
+              resolutionDeadline: BigInt(params.resolutionDeadline),
+              maxParticipants: Number(params.maxParticipants),
+              resolutionMethod: Number(params.resolutionMethod),
+            },
+          ] as never,
+        });
+        await wallet.send([{ to: factory as `0x${string}`, data }]);
+        // The API verifies the deployed address really came from our factory
+        // and carries these terms before it accepts the link.
+        await api.post(`/wagers/${res.wager.id}/attach`, { address: await findDeployed(factory) });
+      }
+
       router.push(`/w/${res.wager.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the wager");
     } finally {
       setBusy(false);
     }
+  }
+
+  /// Reads back the address the factory just created for this account.
+  async function findDeployed(factory: string): Promise<string> {
+    const res = await api.get<{ address: string }>(`/wagers/latest-deployment?factory=${factory}`);
+    return res.address;
   }
 
   if (loading || !user) {

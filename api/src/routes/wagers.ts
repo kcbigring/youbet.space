@@ -8,8 +8,15 @@ import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { parseWager } from "../lib/parse";
 import { centsToWei, formatUsd, weiToCents } from "../lib/money";
-import { getFactory, getWager, hashTerms, isChainConfigured, readWagerState } from "../lib/chain";
-import { addressFor, sendSponsored } from "../lib/wallet";
+import {
+  artifact,
+  getFactory,
+  getWager,
+  hashTerms,
+  readWagerParticipants,
+  readWagerState,
+} from "../lib/chain";
+import { ethers } from "ethers";
 import { monthlyVolumeCents } from "../lib/reputation";
 
 const router = Router();
@@ -153,90 +160,37 @@ router.post(
       include: wagerInclude,
     });
 
-    // Deploy the escrow. Without a configured chain the wager stays a draft so the
-    // social flow still works in local development.
-    let deployment: { address: string; txHash: string } | null = null;
-    if (isChainConfigured()) {
-      deployment = await deployWager(wager.id, userId, {
-        termsHash,
-        stakeCents: body.stakeCents,
-        bondCents,
-        ownerSplitBps: body.ownerSplitBps ?? 0,
-        thresholdBps,
-        fundingDeadline,
-        eventDeadline,
-        resolutionDeadline,
-        maxParticipants: body.maxParticipants,
-        resolutionMethod: body.resolutionMethod,
-        onchainGroupId: group?.onchainId ?? 0,
-      });
-    }
-
+    // The creator deploys the escrow from their own smart account, so the
+    // contract's `creator` is them and the owner fee split reaches them
+    // directly. The API never signs on a user's behalf.
     if (body.invitePhones?.length) {
       await inviteToWager(wager.id, userId, body.invitePhones, body.proposition, body.stakeCents);
     }
 
     const fresh = await prisma.wager.findUniqueOrThrow({ where: { id: wager.id }, include: wagerInclude });
-    res.status(201).json({ ok: true, wager: fresh, deployment });
+    res.status(201).json({
+      ok: true,
+      wager: fresh,
+      // Everything the client needs to deploy it, matching WagerFactory.CreateParams.
+      deploy: {
+        factory: env.factoryAddress ?? null,
+        params: {
+          groupId: String(group?.onchainId ?? 0),
+          termsHash,
+          stake: centsToWei(body.stakeCents).toString(),
+          bond: centsToWei(bondCents).toString(),
+          ownerSplitBps: body.ownerSplitBps ?? 0,
+          attestationThresholdBps: thresholdBps,
+          fundingDeadline: Math.floor(fundingDeadline.getTime() / 1000),
+          eventDeadline: Math.floor(eventDeadline.getTime() / 1000),
+          resolutionDeadline: Math.floor(resolutionDeadline.getTime() / 1000),
+          maxParticipants: body.maxParticipants,
+          resolutionMethod: body.resolutionMethod === "ORACLE" ? 1 : 0,
+        },
+      },
+    });
   })
 );
-
-async function deployWager(
-  wagerId: string,
-  userId: string,
-  terms: {
-    termsHash: string;
-    stakeCents: number;
-    bondCents: number;
-    ownerSplitBps: number;
-    thresholdBps: number;
-    fundingDeadline: Date;
-    eventDeadline: Date;
-    resolutionDeadline: Date;
-    maxParticipants: number;
-    resolutionMethod: "ATTESTATION" | "ORACLE";
-    onchainGroupId: number;
-  }
-) {
-  const params = {
-    groupId: terms.onchainGroupId,
-    termsHash: terms.termsHash,
-    stake: centsToWei(terms.stakeCents),
-    bond: centsToWei(terms.bondCents),
-    ownerSplitBps: terms.ownerSplitBps,
-    attestationThresholdBps: terms.thresholdBps,
-    fundingDeadline: Math.floor(terms.fundingDeadline.getTime() / 1000),
-    eventDeadline: Math.floor(terms.eventDeadline.getTime() / 1000),
-    resolutionDeadline: Math.floor(terms.resolutionDeadline.getTime() / 1000),
-    maxParticipants: terms.maxParticipants,
-    resolutionMethod: terms.resolutionMethod === "ORACLE" ? 1 : 0,
-  };
-
-  const { hash, receipt } = await sendSponsored(userId, async (signer) =>
-    getFactory(signer).createWager(params)
-  );
-
-  const factory = getFactory();
-  const created = receipt!.logs
-    .map((log) => {
-      try {
-        return factory.interface.parseLog(log);
-      } catch {
-        return null;
-      }
-    })
-    .find((parsed) => parsed?.name === "WagerCreated");
-
-  const address = created?.args?.wager as string | undefined;
-  if (!address) throw new Error("WagerCreated event missing from the deploy receipt");
-
-  await prisma.wager.update({
-    where: { id: wagerId },
-    data: { address, txHash: hash, status: "OPEN" },
-  });
-
-  return { address, txHash: hash };
-}
 
 // ------------------------------------------------------------------ reading
 
@@ -270,6 +224,22 @@ router.get(
   })
 );
 
+/// The most recent escrow this user's account deployed. Used right after a
+/// create transaction to learn the address the factory produced. Scoped to the
+/// caller's own wallet, so it cannot be used to enumerate anyone else's wagers.
+router.get(
+  "/latest-deployment",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const me = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } });
+    if (!me.walletAddress) throw badRequest("Connect a wallet first");
+
+    const deployed: string[] = await getFactory().getWagersByCreator(me.walletAddress);
+    if (!deployed.length) throw notFound("No wager found for this account yet");
+
+    res.json({ ok: true, address: deployed[deployed.length - 1] });
+  })
+);
+
 router.get(
   "/:id",
   asyncHandler(async (req: AuthedRequest, res) => {
@@ -294,16 +264,63 @@ router.get(
 );
 
 // ------------------------------------------------------------- participation
+//
+// Joining, attesting, conceding and withdrawing are all transactions the user
+// signs with their passkey and sends from their own smart account. The API does
+// not sign for anyone, so these endpoints record intent and then reconcile
+// against the chain, which is the only authority on who funded what.
 
+const attachSchema = z.object({
+  address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
+});
+
+/// Links a deployed escrow to its off-chain record. Verifies the contract came
+/// from our factory and carries the terms we stored — otherwise anyone could
+/// point a wager at an arbitrary contract.
+router.post(
+  "/:id/attach",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const body = parseBody(attachSchema, req);
+    const wager = await loadWager(req.params.id, req.userId!);
+
+    if (wager.creatorId !== req.userId) throw forbidden("Only the creator can attach the escrow");
+    if (wager.address) throw conflict("This wager is already on-chain");
+
+    const factory = getFactory();
+    if (!(await factory.isWager(body.address))) {
+      throw badRequest("That address was not deployed by the youbet factory");
+    }
+
+    const onchainTerms: string = await getWager(body.address).termsHash();
+    if (wager.termsHash && onchainTerms.toLowerCase() !== wager.termsHash.toLowerCase()) {
+      throw badRequest("The deployed terms do not match this wager");
+    }
+
+    await prisma.wager.update({
+      where: { id: wager.id },
+      data: { address: body.address, txHash: body.txHash, status: "OPEN" },
+    });
+
+    const state = await syncFromChain(wager.id);
+    res.json({ ok: true, address: body.address, onchain: state });
+  })
+);
+
+const sideSchema = z.object({ side: z.number().int().min(0).max(1) });
+
+/// Records the side a user intends to take and returns the exact call for their
+/// wallet to send. Nothing is committed until the chain says so.
 router.post(
   "/:id/join",
   asyncHandler(async (req: AuthedRequest, res) => {
-    const { side } = parseBody(z.object({ side: z.number().int().min(0).max(1) }), req);
+    const { side } = parseBody(sideSchema, req);
     const userId = req.userId!;
     const wager = await loadWager(req.params.id, userId);
 
     if (wager.status !== "OPEN") throw conflict("This wager is no longer accepting participants");
     if (wager.fundingDeadline < new Date()) throw conflict("Funding has closed for this wager");
+    if (!wager.address) throw conflict("This wager is not on-chain yet");
 
     const existing = wager.participants.find((p) => p.userId === userId);
     if (existing?.state === "JOINED") throw conflict("You have already joined this wager");
@@ -311,34 +328,33 @@ router.post(
     // Real money requires a proven phone. Off while the alpha runs on test funds.
     if (env.requireVerifiedPhone) {
       const me = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-      if (!me.phoneVerified) {
-        throw forbidden("Verify your phone number before putting money on a wager");
-      }
+      if (!me.phoneVerified) throw forbidden("Verify your phone number before funding a wager");
     }
 
-    const monthlyLimit = env.monthlyLimitCents;
     const committed = await monthlyVolumeCents(userId);
-    if (committed + wager.stakeCents > monthlyLimit) {
-      throw badRequest(`This would put you over your ${formatUsd(monthlyLimit)} monthly limit`);
+    if (committed + wager.stakeCents > env.monthlyLimitCents) {
+      throw badRequest(`This would put you over your ${formatUsd(env.monthlyLimitCents)} monthly limit`);
     }
-
-    const value = centsToWei(wager.stakeCents) + centsToWei(wager.bondCents);
-    const { hash } = await sendSponsored(
-      userId,
-      async (signer) => getWager(wager.address!, signer).join(side, { value }),
-      value
-    );
 
     await prisma.wagerParticipant.upsert({
       where: { wagerId_userId: { wagerId: wager.id, userId } },
-      update: { side, state: "JOINED", fundedAt: new Date(), fundedTxHash: hash },
-      create: { wagerId: wager.id, userId, side, state: "JOINED", fundedAt: new Date(), fundedTxHash: hash },
+      update: { side },
+      create: { wagerId: wager.id, userId, side, state: "INVITED" },
     });
 
-    await syncFromChain(wager.id);
-    res.json({ ok: true, txHash: hash });
+    res.json({ ok: true, call: joinCall(wager.address, side, wager.stakeCents, wager.bondCents) });
   })
 );
+
+/// The calldata for `join(side)` plus the stake and bond it must carry.
+function joinCall(address: string, side: number, stakeCents: number, bondCents: number) {
+  const iface = new ethers.Interface(artifact("Wager").abi);
+  return {
+    to: address,
+    data: iface.encodeFunctionData("join", [side]),
+    value: (centsToWei(stakeCents) + centsToWei(bondCents)).toString(),
+  };
+}
 
 router.post(
   "/:id/decline",
@@ -349,72 +365,6 @@ router.post(
       data: { state: "DECLINED" },
     });
     res.json({ ok: true });
-  })
-);
-
-const attestSchema = z.object({ winningSide: z.number().int().min(0).max(1) });
-
-router.post(
-  "/:id/attest",
-  asyncHandler(async (req: AuthedRequest, res) => {
-    const { winningSide } = parseBody(attestSchema, req);
-    const userId = req.userId!;
-    const wager = await loadWager(req.params.id, userId);
-
-    const me = wager.participants.find((p) => p.userId === userId);
-    if (me?.state !== "JOINED") throw forbidden("Only participants can attest");
-    if (me.attestedAt) throw conflict("You have already resolved this wager");
-
-    const { hash } = await sendSponsored(userId, async (signer) =>
-      getWager(wager.address!, signer).attest(winningSide)
-    );
-
-    await prisma.wagerParticipant.update({
-      where: { wagerId_userId: { wagerId: wager.id, userId } },
-      data: { attestedAt: new Date(), attestedChoice: winningSide },
-    });
-
-    const state = await syncFromChain(wager.id);
-    res.json({ ok: true, txHash: hash, onchain: state });
-  })
-);
-
-router.post(
-  "/:id/concede",
-  asyncHandler(async (req: AuthedRequest, res) => {
-    const userId = req.userId!;
-    const wager = await loadWager(req.params.id, userId);
-
-    const me = wager.participants.find((p) => p.userId === userId);
-    if (me?.state !== "JOINED" || me.side === null) throw forbidden("Only participants can concede");
-    if (me.attestedAt) throw conflict("You have already resolved this wager");
-
-    const { hash } = await sendSponsored(userId, async (signer) => getWager(wager.address!, signer).concede());
-
-    await prisma.wagerParticipant.update({
-      where: { wagerId_userId: { wagerId: wager.id, userId } },
-      data: { attestedAt: new Date(), attestedChoice: me.side === 0 ? 1 : 0, conceded: true },
-    });
-
-    const state = await syncFromChain(wager.id);
-    res.json({ ok: true, txHash: hash, onchain: state });
-  })
-);
-
-/// Claims whatever the escrow owes the caller — winnings, refunds and bonds.
-router.post(
-  "/:id/withdraw",
-  asyncHandler(async (req: AuthedRequest, res) => {
-    const userId = req.userId!;
-    const wager = await loadWager(req.params.id, userId);
-    if (!wager.address) throw conflict("This wager is not on-chain yet");
-
-    const address = await addressFor(userId);
-    const credits: bigint = await getWager(wager.address).credits(address);
-    if (credits === 0n) throw conflict("Nothing to withdraw");
-
-    const { hash } = await sendSponsored(userId, async (signer) => getWager(wager.address!, signer).withdraw());
-    res.json({ ok: true, txHash: hash, amountCents: weiToCents(credits) });
   })
 );
 
@@ -504,6 +454,36 @@ export async function syncFromChain(wagerId: string) {
 
   const state = await readWagerState(wager.address);
   const settled = state.status === "SETTLED";
+
+  // Reconcile participation from the chain. A client reporting "I joined" proves
+  // nothing; the escrow holding their stake does.
+  const onchain = await readWagerParticipants(wager.address);
+  for (const entry of onchain) {
+    const user = await prisma.user.findFirst({
+      where: { walletAddress: { equals: entry.address, mode: "insensitive" } },
+    });
+    if (!user) continue;
+
+    await prisma.wagerParticipant.upsert({
+      where: { wagerId_userId: { wagerId, userId: user.id } },
+      update: {
+        side: entry.side,
+        state: "JOINED",
+        fundedAt: undefined,
+        conceded: entry.conceded,
+        ...(entry.hasResolved ? { attestedAt: new Date(), attestedChoice: entry.resolutionChoice } : {}),
+      },
+      create: {
+        wagerId,
+        userId: user.id,
+        side: entry.side,
+        state: "JOINED",
+        fundedAt: new Date(),
+        conceded: entry.conceded,
+        ...(entry.hasResolved ? { attestedAt: new Date(), attestedChoice: entry.resolutionChoice } : {}),
+      },
+    });
+  }
 
   await prisma.wager.update({
     where: { id: wagerId },

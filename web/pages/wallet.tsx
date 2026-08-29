@@ -5,6 +5,7 @@ import { useSession } from "../lib/useSession";
 import type { Reputation } from "../lib/types";
 import { Layout, Banner } from "../components/Layout";
 import { VerifyPhone } from "../components/VerifyPhone";
+import { ConnectWallet } from "../components/ConnectWallet";
 
 interface Me {
   id: string;
@@ -13,7 +14,7 @@ interface Me {
 }
 
 interface WalletInfo {
-  wallet: { address: string; chainId: number; balanceEth: string; balanceCents: number | null };
+  wallet: { address: string; chainId: number; balanceEth: string; balanceCents: number | null } | null;
   limits: {
     monthlyLimitCents: number;
     committedCents: number;
@@ -61,26 +62,33 @@ export default function Wallet() {
       <h1>Wallet</h1>
       <Banner>{error}</Banner>
 
-      {info && (
+      {info && !info.wallet && (
+        <>
+          <p className="muted small">You do not have a wallet yet.</p>
+          <ConnectWallet onReady={() => router.reload()} />
+        </>
+      )}
+
+      {info?.wallet && (
         <>
           <div className="card">
             <div className="small muted">Balance</div>
             <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em", margin: "4px 0" }}>
-              {info.wallet.balanceCents != null ? usd(info.wallet.balanceCents) : `${info.wallet.balanceEth} ETH`}
+              {info.wallet!.balanceCents != null ? usd(info.wallet!.balanceCents) : `${info.wallet!.balanceEth} ETH`}
             </div>
             <div className="small muted">
-              {CHAINS[info.wallet.chainId] || `Chain ${info.wallet.chainId}`} · gas is sponsored
+              {CHAINS[info.wallet!.chainId] || `Chain ${info.wallet!.chainId}`} · gas is sponsored
             </div>
 
             <div className="divider" style={{ margin: "14px 0" }} />
 
             <div className="small muted">Your address</div>
             <div className="row" style={{ marginTop: 4 }}>
-              <span className="mono break grow">{info.wallet.address}</span>
+              <span className="mono break grow">{info.wallet!.address}</span>
               <button
                 className="small subtle"
                 onClick={() => {
-                  navigator.clipboard?.writeText(info.wallet.address);
+                  navigator.clipboard?.writeText(info.wallet!.address);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1500);
                 }}

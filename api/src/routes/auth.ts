@@ -5,7 +5,7 @@ import prisma from "../prisma";
 import { env } from "../env";
 import { sendSms } from "../twilio";
 import { asyncHandler, parseBody } from "../lib/http";
-import { badRequest, unauthorized } from "../lib/errors";
+import { badRequest, conflict, unauthorized } from "../lib/errors";
 import {
   authenticate,
   consumeInviteLink,
@@ -322,6 +322,31 @@ router.post(
       user: { id: user.id, phone: user.phone, displayName: user.displayName, phoneVerified: true },
       landing,
     });
+  })
+);
+
+const walletSchema = z.object({
+  address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+});
+
+/// Records the smart-account address the user just connected. It is how on-chain
+/// activity maps back to a person; we hold no key for it and cannot spend from it.
+router.post(
+  "/wallet",
+  authenticate,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { address } = parseBody(walletSchema, req);
+
+    const claimed = await prisma.user.findUnique({ where: { walletAddress: address } });
+    if (claimed && claimed.id !== req.userId) {
+      throw conflict("That wallet is already linked to another account");
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.userId! },
+      data: { walletAddress: address },
+    });
+    res.json({ ok: true, walletAddress: user.walletAddress });
   })
 );
 
