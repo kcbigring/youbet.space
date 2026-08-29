@@ -112,6 +112,27 @@ export async function createInviteLink(opts: {
   phone?: string | null;
   ttlHours?: number;
 }) {
+  // An open link — one not addressed to a particular number — is the same link
+  // every time it is asked for. Minting a fresh one on each visit would leave a
+  // trail of live invites for a single wager and change the URL under anyone
+  // who had already been sent it.
+  if (!opts.phone) {
+    const existing = await prisma.invite.findFirst({
+      where: {
+        invitedById: opts.invitedById,
+        phone: null,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+        ...(opts.wagerId ? { wagerId: opts.wagerId } : { wagerId: null }),
+        ...(opts.groupId ? { groupId: opts.groupId } : { groupId: null }),
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing?.linkToken) {
+      return { invite: existing, linkToken: existing.linkToken, url: `${env.appUrl}/j/${existing.linkToken}` };
+    }
+  }
+
   const linkToken = crypto.randomBytes(24).toString("base64url");
   const expiresAt = new Date(Date.now() + (opts.ttlHours ?? 14 * 24) * 60 * 60 * 1000);
 

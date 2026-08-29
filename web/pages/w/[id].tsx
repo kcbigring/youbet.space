@@ -187,16 +187,11 @@ export default function WagerDetail() {
       )}
 
       {wager.status === "OPEN" && wager.creatorId === user.id && joined.length < 2 && (
-        <div className="card" style={{ marginTop: 18 }}>
-          <b>Send it to them</b>
-          <p className="small muted" style={{ margin: "6px 0 12px" }}>
-            Nothing happens until someone takes the other side. We don&rsquo;t text anyone on your
-            behalf &mdash; send this from your own phone.
-          </p>
+        <div style={{ marginTop: 18 }}>
           <ShareInvite
             endpoint={`/wagers/${wager.id}/invites`}
-            label="Share this challenge"
             shareTitle="I'll bet you"
+            heading="Nobody has taken the other side yet"
           />
         </div>
       )}
@@ -348,13 +343,10 @@ export default function WagerDetail() {
       {wager.status === "OPEN" && (
         <>
           <h2>Bring someone in</h2>
-          <p className="small muted" style={{ marginTop: -4 }}>
-            Send this yourself — it lands as a text from you, not from us.
-          </p>
           <ShareInvite
             endpoint={`/wagers/${wager.id}/invites`}
-            label="Share this challenge"
             shareTitle="I'll bet you"
+            heading="Invite more people"
           />
         </>
       )}

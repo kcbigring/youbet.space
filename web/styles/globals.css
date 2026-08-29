@@ -507,3 +507,31 @@ button.small { padding: 8px 12px; font-size: 13px; }
 .side-row.selected .side-row-mark {
   color: var(--accent);
 }
+
+/* Sharing is the step people miss, so it is a panel rather than a button. */
+.share-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.share-link {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-link input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  padding: 11px 12px;
+}
+
+.share-preview {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-style: italic;
+  line-height: 1.5;
+}

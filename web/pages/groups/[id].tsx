@@ -124,8 +124,8 @@ export default function GroupPage() {
           <div style={{ marginBottom: 20 }}>
             <ShareInvite
               endpoint={`/groups/${group.id}/invites`}
-              label="Invite to this group"
               shareTitle={group.name}
+              heading={`Invite people to ${group.name}`}
             />
           </div>
 
