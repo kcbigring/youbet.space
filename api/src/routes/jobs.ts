@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../lib/http";
-import { requireAdmin } from "../lib/auth";
+import { requireScheduler } from "../lib/scheduler";
 import { findDueReminders, recordReminders } from "../lib/reminders";
 import { dispatchPending } from "../lib/notify";
 
@@ -8,10 +8,9 @@ const router = Router();
 
 /// Endpoints driven by Cloud Scheduler rather than by a person.
 ///
-/// Guarded by the admin key. On GCP, give the scheduler job a service account
-/// and put the key in the request header — or front this with IAM and drop the
-/// key entirely.
-router.use(requireAdmin);
+/// Authenticated by the OIDC identity Google signs for Cloud Scheduler. The
+/// admin key still works for triggering a run by hand.
+router.use(requireScheduler);
 
 /// Hourly. Finds everyone who owes an attestation, records the nudge that is
 /// due, then delivers whatever is undelivered.

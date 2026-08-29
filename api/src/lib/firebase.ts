@@ -54,9 +54,16 @@ export async function verifyPhoneToken(idToken: string): Promise<VerifiedPhone> 
 
   let decoded: { uid: string; phone_number?: string };
   try {
-    decoded = await getAuth(getApp()).verifyIdToken(idToken, true);
+    // checkRevoked is deliberately off. It turns a local signature check into a
+    // call to the Identity Toolkit API, which needs credentials and IAM the
+    // Cloud Run service account does not carry — and for a token that is
+    // seconds old, revocation cannot meaningfully have happened yet.
+    decoded = await getAuth(getApp()).verifyIdToken(idToken);
   } catch (error) {
-    throw new ApiError(401, "Could not verify that sign-in token");
+    // Log the real reason. A bare 401 here is unactionable from the outside.
+    console.error("Firebase token verification failed", error);
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new ApiError(401, `Could not verify that sign-in token: ${detail}`);
   }
 
   if (!decoded.phone_number) {

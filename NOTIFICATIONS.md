@@ -70,17 +70,43 @@ XMTP client, which yours will not.
 one accepts. Adding FCM or email means implementing `send` and adding it to
 `channels()`; the job itself does not change.
 
-## Deploying the schedule
+## The schedule (already running)
+
+Cloud Scheduler job `youbet-reminders`, hourly at the top of the hour,
+America/Chicago:
 
 ```bash
 gcloud scheduler jobs create http youbet-reminders \
-  --project youbet-506923 \
-  --schedule "0 * * * *" \
-  --uri "https://<api-url>/jobs/reminders" \
+  --project youbet-506923 --location us-central1 \
+  --schedule "0 * * * *" --time-zone "America/Chicago" \
+  --uri "https://youbet-api-843347838760.us-central1.run.app/jobs/reminders" \
   --http-method POST \
-  --headers "x-api-key=$API_KEY" \
-  --location us-central1
+  --oidc-service-account-email youbet-scheduler@youbet-506923.iam.gserviceaccount.com \
+  --oidc-token-audience "https://youbet-api-843347838760.us-central1.run.app"
 ```
 
-Better still, drop the key and give the job a service account with an OIDC
-token, then check the caller's identity instead.
+### It authenticates by identity, not a shared secret
+
+The Cloud Run service is public, so IAM does not gate `/jobs/*` — the check has
+to happen in the app. Scheduler sends an OIDC token; `src/lib/scheduler.ts`
+verifies Google's signature, that the audience is this service, and that the
+caller is `youbet-scheduler@`. A leaked token expires on its own and there is no
+long-lived key to rotate. The admin API key still works for triggering a run by
+hand.
+
+**Cloud Scheduler cannot mint that token without one extra grant**, which is easy
+to miss because the job simply never fires and records status `-1`:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  youbet-scheduler@youbet-506923.iam.gserviceaccount.com \
+  --member="serviceAccount:service-843347838760@gcp-sa-cloudscheduler.iam.gserviceaccount.com" \
+  --role=roles/iam.serviceAccountTokenCreator
+```
+
+Verify a run actually arrived:
+
+```bash
+gcloud logging read 'resource.labels.service_name="youbet-api"
+  AND httpRequest.requestUrl:"/jobs/reminders"' --project youbet-506923 --limit 5
+```

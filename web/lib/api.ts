@@ -1,4 +1,7 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+/// Empty means same-origin: in production the API is proxied at /api by a
+/// Next.js rewrite, so there is no cross-origin request and no preflight.
+/// Local development points straight at the API on its own port.
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const TOKEN_KEY = "youbet.session";
 
 export function getToken(): string | null {

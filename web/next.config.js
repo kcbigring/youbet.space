@@ -1,7 +1,17 @@
 /** @type {import('next').NextConfig} */
+const API_ORIGIN = process.env.API_ORIGIN || process.env.NEXT_PUBLIC_API_ORIGIN;
+
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+
+  // Proxy the API under our own origin. This keeps requests same-origin, so
+  // there is no CORS preflight on every call and no Cloud Run URL in the
+  // client, and it avoids needing a separately verified api. subdomain.
+  async rewrites() {
+    if (!API_ORIGIN) return [];
+    return [{ source: "/api/:path*", destination: `${API_ORIGIN}/:path*` }];
+  },
   webpack: (config) => {
     // We ship one connector: Coinbase Smart Wallet, a passkey-owned ERC-4337
     // account. The connectors barrel imports every other connector too, so stub

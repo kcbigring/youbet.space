@@ -48,6 +48,12 @@ export const env = {
   maxPotCents: num(process.env.MAX_POT_CENTS, 50_000),
   monthlyLimitCents: num(process.env.MONTHLY_LIMIT_CENTS, 100_000),
 
+  /// Service account Cloud Scheduler runs as. Job endpoints accept its signed
+  /// OIDC token instead of a shared secret.
+  schedulerServiceAccount: process.env.SCHEDULER_SERVICE_ACCOUNT,
+  /// Audience the scheduler mints its token for; defaults to this service's URL.
+  schedulerAudience: process.env.SCHEDULER_AUDIENCE,
+
   // Phone verification via Firebase. Google owns the carrier relationships, so
   // there is no A2P 10DLC registration to wait on.
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
