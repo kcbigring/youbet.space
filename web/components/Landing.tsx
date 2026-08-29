@@ -36,15 +36,14 @@ export function Landing() {
       </header>
 
       <section className="landing-hero">
-        <p className="landing-eyebrow">Private wagers between friends</p>
         <h1>
-          &ldquo;I&rsquo;ll bet you.&rdquo;
-          <span>Now the money actually moves.</span>
+          Private wagers between friends.
+          <span>Nobody has to chase anybody.</span>
         </h1>
         <p className="landing-lede">
-          You already make these bets. The problem is what happens after &mdash; the terms get
-          fuzzy, somebody forgets, and collecting is awkward. This holds the money and settles
-          it for you.
+          &ldquo;I&rsquo;ll bet you.&rdquo; You already say it. The problem is everything after
+          &mdash; the terms get fuzzy, somebody forgets, and collecting is awkward. This holds
+          the money and settles it for you.
         </p>
         <div className="landing-actions">
           <Link href="/signin">
