@@ -10,7 +10,7 @@ already know each other. See `spec/friendly_wager_execution_plan.pdf`.
 
 | Directory    | What it is                                                            |
 | ------------ | --------------------------------------------------------------------- |
-| `contracts/` | Solidity escrow — `Wager`, `WagerFactory`, `GroupRegistry`, `ResolverRegistry`, `Treasury`. Hardhat, deployed to Base. |
+| `contracts/` | Solidity escrow — `WagerBook`, `GroupRegistry`, `ResolverRegistry`, `Treasury`. Hardhat, deployed to Base. |
 | `api/`       | Express + Prisma + Postgres. Identity, groups, social data, reputation, and the relayer. |
 | `web/`       | Next.js mobile-first PWA.                                             |
 | `spec/`      | The execution plan this is built against.                             |

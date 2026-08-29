@@ -67,8 +67,8 @@ npm run deploy:base
 
 This deploys `Treasury`, `GroupRegistry`, `ResolverRegistry` and `WagerFactory`,
 writes `deployments/base_sepolia.json`, and then **syncs the addresses into your
-env files automatically** — `FACTORY_ADDRESS` and friends into `.env.local`,
-`NEXT_PUBLIC_FACTORY_ADDRESS` into `web/.env.local`. Nothing to copy by hand.
+env files automatically** — `WAGER_BOOK_ADDRESS` and friends into `.env.local`,
+`NEXT_PUBLIC_WAGER_BOOK_ADDRESS` into `web/.env.local`. Nothing to copy by hand.
 
 Risk limits are applied at deploy time from the execution plan: $100 max per
 person per wager, $500 max pot, converted at `DEPLOY_ETH_USD` (default 3000).
@@ -118,22 +118,12 @@ testnet is free from the faucet.
 
 5. Restart `next dev`.
 
-### Read this before you configure the policy
+### Policy
 
-CDP's paymaster sponsors calls to **allowlisted contract addresses**. Our
-architecture deploys a brand-new `Wager` contract for every wager, so:
-
-- `createWager` on the factory — one fixed address, allowlists fine.
-- `join`, `attest`, `concede`, `withdraw` — a **different address every wager**,
-  so they cannot be allowlisted ahead of time.
-
-That means sponsorship silently covers wager *creation* and nothing else. The
-workaround is adding each new wager address to the policy via the CDP API right
-after it is created, which is fragile and racy.
-
-The gap lands on the invited friend — the one person with no wallet and no ETH.
-See [contracts/README.md](contracts/README.md#one-contract-per-wager) for the
-measured numbers and the alternative.
+Every wager lives in one `WagerBook` contract, so there is a single address to
+allowlist and every call — create, join, attest, concede, withdraw — is
+sponsorable. Allowlist the `WAGER_BOOK_ADDRESS` from your deployment and you are
+done.
 
 ---
 

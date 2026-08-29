@@ -33,8 +33,8 @@ async function main() {
   const maxStakeWei = toWei(MAX_STAKE_USD);
   const maxPotWei = toWei(MAX_POT_USD);
 
-  const factory = await (
-    await ethers.getContractFactory("WagerFactory")
+  const book = await (
+    await ethers.getContractFactory("WagerBook")
   ).deploy(
     owner,
     process.env.TREASURY_ADDRESS || (await treasury.getAddress()),
@@ -43,8 +43,8 @@ async function main() {
     maxStakeWei,
     maxPotWei
   );
-  await factory.waitForDeployment();
-  console.log(`WagerFactory:     ${await factory.getAddress()}`);
+  await book.waitForDeployment();
+  console.log(`WagerBook:        ${await book.getAddress()}`);
 
   if (process.env.ORACLE_RESOLVER) {
     await (await resolvers.setResolver(process.env.ORACLE_RESOLVER, true, "primary-resolver")).wait();
@@ -69,7 +69,7 @@ async function main() {
       Treasury: await treasury.getAddress(),
       GroupRegistry: await groups.getAddress(),
       ResolverRegistry: await resolvers.getAddress(),
-      WagerFactory: await factory.getAddress(),
+      WagerBook: await book.getAddress(),
     },
   };
 
@@ -78,7 +78,7 @@ async function main() {
   const out = path.join(dir, `${network.name}.json`);
   fs.writeFileSync(out, JSON.stringify(record, null, 2));
   console.log(`\nSaved ${out}`);
-  console.log(`\nSet in the API env:\n  FACTORY_ADDRESS=${record.contracts.WagerFactory}`);
+  console.log(`\nSet in the API env:\n  WAGER_BOOK_ADDRESS=${record.contracts.WagerBook}`);
 }
 
 main().catch((error) => {

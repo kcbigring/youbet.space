@@ -7,7 +7,7 @@ const app = createApp();
 const server = app.listen(env.port, () => {
   console.log(`youbet API listening on http://localhost:${env.port}`);
   console.log(`  chain    ${env.chainId} via ${env.rpcUrl}`);
-  console.log(`  factory  ${env.factoryAddress ?? "(not configured)"}`);
+  console.log(`  book     ${env.wagerBookAddress ?? "(not configured)"}`);
   console.log(`  database ${env.databaseUrl ? "configured" : "(not configured)"}`);
 });
 

@@ -35,7 +35,8 @@ export const env = {
   chainId: num(process.env.CHAIN_ID, 84532),
   rpcUrl: process.env.BASE_RPC || process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",
   deployerPrivateKey: process.env.DEPLOYER_PRIVATE_KEY,
-  factoryAddress: process.env.FACTORY_ADDRESS,
+  /// The single WagerBook contract holding every wager.
+  wagerBookAddress: process.env.WAGER_BOOK_ADDRESS || process.env.FACTORY_ADDRESS,
   groupRegistryAddress: process.env.GROUP_REGISTRY_ADDRESS,
   resolverRegistryAddress: process.env.RESOLVER_REGISTRY_ADDRESS,
   treasuryAddress: process.env.TREASURY_ADDRESS,

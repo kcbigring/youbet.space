@@ -8,14 +8,7 @@ import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { parseWager } from "../lib/parse";
 import { centsToWei, formatUsd, weiToCents } from "../lib/money";
-import {
-  artifact,
-  getFactory,
-  getWager,
-  hashTerms,
-  readWagerParticipants,
-  readWagerState,
-} from "../lib/chain";
+import { artifact, getBook, hashTerms, readWagerParticipants, readWagerState } from "../lib/chain";
 import { ethers } from "ethers";
 import { monthlyVolumeCents } from "../lib/reputation";
 
@@ -173,7 +166,7 @@ router.post(
       wager: fresh,
       // Everything the client needs to deploy it, matching WagerFactory.CreateParams.
       deploy: {
-        factory: env.factoryAddress ?? null,
+        book: env.wagerBookAddress ?? null,
         params: {
           groupId: String(group?.onchainId ?? 0),
           termsHash,
@@ -224,19 +217,19 @@ router.get(
   })
 );
 
-/// The most recent escrow this user's account deployed. Used right after a
-/// create transaction to learn the address the factory produced. Scoped to the
-/// caller's own wallet, so it cannot be used to enumerate anyone else's wagers.
+/// The newest wager id this user's account created, read back from the book
+/// after a create transaction. Scoped to the caller's own wallet, so it cannot
+/// be used to enumerate anyone else's wagers.
 router.get(
-  "/latest-deployment",
+  "/latest-onchain-id",
   asyncHandler(async (req: AuthedRequest, res) => {
     const me = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } });
     if (!me.walletAddress) throw badRequest("Connect a wallet first");
 
-    const deployed: string[] = await getFactory().getWagersByCreator(me.walletAddress);
-    if (!deployed.length) throw notFound("No wager found for this account yet");
+    const ids: bigint[] = await getBook().getWagersByCreator(me.walletAddress);
+    if (!ids.length) throw notFound("No wager found for this account yet");
 
-    res.json({ ok: true, address: deployed[deployed.length - 1] });
+    res.json({ ok: true, onchainId: Number(ids[ids.length - 1]) });
   })
 );
 
@@ -251,11 +244,11 @@ router.get(
     });
 
     let onchain = null;
-    if (wager.address) {
+    if (wager.onchainId) {
       try {
-        onchain = await readWagerState(wager.address);
+        onchain = await readWagerState(String(wager.onchainId));
       } catch (error) {
-        console.warn(`Could not read on-chain state for ${wager.address}`, error);
+        console.warn(`Could not read on-chain state for wager ${wager.onchainId}`, error);
       }
     }
 
@@ -270,40 +263,40 @@ router.get(
 // not sign for anyone, so these endpoints record intent and then reconcile
 // against the chain, which is the only authority on who funded what.
 
-const attachSchema = z.object({
-  address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+const linkSchema = z.object({
+  onchainId: z.number().int().positive(),
   txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
 });
 
-/// Links a deployed escrow to its off-chain record. Verifies the contract came
-/// from our factory and carries the terms we stored — otherwise anyone could
-/// point a wager at an arbitrary contract.
+/// Links an on-chain wager id to its off-chain record. Verifies the terms and
+/// creator recorded on-chain match ours, so a client cannot point its wager at
+/// someone else's escrow.
 router.post(
-  "/:id/attach",
+  "/:id/link",
   asyncHandler(async (req: AuthedRequest, res) => {
-    const body = parseBody(attachSchema, req);
+    const body = parseBody(linkSchema, req);
     const wager = await loadWager(req.params.id, req.userId!);
 
-    if (wager.creatorId !== req.userId) throw forbidden("Only the creator can attach the escrow");
-    if (wager.address) throw conflict("This wager is already on-chain");
+    if (wager.creatorId !== req.userId) throw forbidden("Only the creator can link the escrow");
+    if (wager.onchainId) throw conflict("This wager is already on-chain");
 
-    const factory = getFactory();
-    if (!(await factory.isWager(body.address))) {
-      throw badRequest("That address was not deployed by the youbet factory");
+    const onchain = await getBook().getWager(body.onchainId);
+    if (wager.termsHash && onchain.termsHash.toLowerCase() !== wager.termsHash.toLowerCase()) {
+      throw badRequest("The on-chain terms do not match this wager");
     }
 
-    const onchainTerms: string = await getWager(body.address).termsHash();
-    if (wager.termsHash && onchainTerms.toLowerCase() !== wager.termsHash.toLowerCase()) {
-      throw badRequest("The deployed terms do not match this wager");
+    const creator = await prisma.user.findUniqueOrThrow({ where: { id: wager.creatorId } });
+    if (creator.walletAddress && onchain.creator.toLowerCase() !== creator.walletAddress.toLowerCase()) {
+      throw badRequest("That wager was created by a different account");
     }
 
     await prisma.wager.update({
       where: { id: wager.id },
-      data: { address: body.address, txHash: body.txHash, status: "OPEN" },
+      data: { onchainId: body.onchainId, txHash: body.txHash, status: "OPEN" },
     });
 
     const state = await syncFromChain(wager.id);
-    res.json({ ok: true, address: body.address, onchain: state });
+    res.json({ ok: true, onchainId: body.onchainId, onchain: state });
   })
 );
 
@@ -320,7 +313,7 @@ router.post(
 
     if (wager.status !== "OPEN") throw conflict("This wager is no longer accepting participants");
     if (wager.fundingDeadline < new Date()) throw conflict("Funding has closed for this wager");
-    if (!wager.address) throw conflict("This wager is not on-chain yet");
+    if (!wager.onchainId) throw conflict("This wager is not on-chain yet");
 
     const existing = wager.participants.find((p) => p.userId === userId);
     if (existing?.state === "JOINED") throw conflict("You have already joined this wager");
@@ -342,16 +335,16 @@ router.post(
       create: { wagerId: wager.id, userId, side, state: "INVITED" },
     });
 
-    res.json({ ok: true, call: joinCall(wager.address, side, wager.stakeCents, wager.bondCents) });
+    res.json({ ok: true, call: joinCall(wager.onchainId, side, wager.stakeCents, wager.bondCents) });
   })
 );
 
-/// The calldata for `join(side)` plus the stake and bond it must carry.
-function joinCall(address: string, side: number, stakeCents: number, bondCents: number) {
-  const iface = new ethers.Interface(artifact("Wager").abi);
+/// The calldata for `join(wagerId, side)` plus the stake and bond it must carry.
+function joinCall(onchainId: number, side: number, stakeCents: number, bondCents: number) {
+  const iface = new ethers.Interface(artifact("WagerBook").abi);
   return {
-    to: address,
-    data: iface.encodeFunctionData("join", [side]),
+    to: env.wagerBookAddress,
+    data: iface.encodeFunctionData("join", [onchainId, side]),
     value: (centsToWei(stakeCents) + centsToWei(bondCents)).toString(),
   };
 }
@@ -450,14 +443,14 @@ export async function syncFromChain(wagerId: string) {
     where: { id: wagerId },
     include: { participants: true },
   });
-  if (!wager.address) return null;
+  if (!wager.onchainId) return null;
 
-  const state = await readWagerState(wager.address);
+  const state = await readWagerState(String(wager.onchainId));
   const settled = state.status === "SETTLED";
 
   // Reconcile participation from the chain. A client reporting "I joined" proves
   // nothing; the escrow holding their stake does.
-  const onchain = await readWagerParticipants(wager.address);
+  const onchain = await readWagerParticipants(String(wager.onchainId));
   for (const entry of onchain) {
     const user = await prisma.user.findFirst({
       where: { walletAddress: { equals: entry.address, mode: "insensitive" } },
@@ -488,7 +481,8 @@ export async function syncFromChain(wagerId: string) {
   await prisma.wager.update({
     where: { id: wagerId },
     data: {
-      status: state.status,
+      // NONE means the id does not exist on-chain; leave the record alone.
+      status: state.status === "NONE" ? wager.status : state.status,
       winningSide: settled ? state.winningSide : null,
       settledAt: settled && !wager.settledAt ? new Date() : wager.settledAt,
     },

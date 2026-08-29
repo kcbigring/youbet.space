@@ -39,7 +39,7 @@ router.get(
 
     checks.contracts = {
       ok: isChainConfigured(),
-      detail: env.factoryAddress ? `factory ${env.factoryAddress}` : "FACTORY_ADDRESS not set",
+      detail: env.wagerBookAddress ? `book ${env.wagerBookAddress}` : "WAGER_BOOK_ADDRESS not set",
     };
     // Invites are share links, so SMS is a convenience rather than a dependency.
     checks.phoneVerification = {
@@ -98,7 +98,7 @@ router.get("/config", (_req, res) => {
   res.json({
     ok: true,
     chainId: env.chainId,
-    factoryAddress: env.factoryAddress ?? null,
+    wagerBookAddress: env.wagerBookAddress ?? null,
     limits: {
       maxStakeCents: env.maxStakeCents,
       maxPotCents: env.maxPotCents,

@@ -55,13 +55,13 @@ async function deploy(name: string, signer: ethers.Wallet, args: unknown[] = [])
 
 describe("API to contract integration", () => {
   it("loads every contract artifact the API references", () => {
-    for (const name of ["Wager", "WagerFactory", "GroupRegistry", "ResolverRegistry", "Treasury"]) {
+    for (const name of ["WagerBook", "GroupRegistry", "ResolverRegistry", "Treasury"]) {
       expect(artifact(name).abi.length).toBeGreaterThan(0);
     }
   });
 
   it("encodes the exact createWager parameters the API sends", () => {
-    const iface = new ethers.Interface(artifact("WagerFactory").abi);
+    const iface = new ethers.Interface(artifact("WagerBook").abi);
     const encoded = iface.encodeFunctionData("createWager", [
       {
         groupId: 0,
@@ -78,6 +78,10 @@ describe("API to contract integration", () => {
       },
     ]);
     expect(encoded.startsWith("0x")).toBe(true);
+
+    // join now carries the wager id, since one contract holds them all.
+    const joinData = iface.encodeFunctionData("join", [1, 0]);
+    expect(joinData.startsWith("0x")).toBe(true);
   });
 
   it("produces a stable hash for identical terms", () => {
@@ -108,7 +112,7 @@ describe("API to contract integration", () => {
       const treasury = await deploy("Treasury", deployer, [deployer.address]);
       const groups = await deploy("GroupRegistry", deployer);
       const resolvers = await deploy("ResolverRegistry", deployer, [deployer.address]);
-      const factory = await deploy("WagerFactory", deployer, [
+      const book = await deploy("WagerBook", deployer, [
         deployer.address,
         await treasury.getAddress(),
         await groups.getAddress(),
@@ -117,14 +121,13 @@ describe("API to contract integration", () => {
         centsToWei(50_000),
       ]);
 
-      // Base the deadlines on chain time, not wall-clock: hardhat_reset rewinds the
-      // node's clock and the two drift apart.
+      const bookAddress = await book.getAddress();
       const now = (await provider.getBlock("latest"))!.timestamp;
       const stakeCents = 2500;
       const bondCents = 100;
 
-      // Create, exactly as api/src/routes/wagers.ts does.
-      const tx = await (factory.connect(alice) as any).createWager({
+      // Create, exactly as api/src/routes/wagers.ts encodes it.
+      const tx = await (book.connect(alice) as any).createWager({
         groupId: 0,
         termsHash: hashTerms({
           proposition: "Texas beats Ohio State",
@@ -147,49 +150,47 @@ describe("API to contract integration", () => {
       });
       const receipt = await tx.wait();
 
-      // Event decoding, as the API does to learn the wager address.
+      // Event decoding, as the API does to learn the wager id.
       const created = receipt.logs
         .map((log: any) => {
           try {
-            return factory.interface.parseLog(log);
+            return book.interface.parseLog(log);
           } catch {
             return null;
           }
         })
         .find((parsed: any) => parsed?.name === "WagerCreated");
-      const address = created!.args.wager as string;
-      expect(ethers.isAddress(address)).toBe(true);
+      const wagerId = created!.args.wagerId as bigint;
+      expect(wagerId).toBe(1n);
 
-      const wagerAbi = artifact("Wager").abi;
+      const abi = artifact("WagerBook").abi;
       const value = centsToWei(stakeCents) + centsToWei(bondCents);
-      await (await new ethers.Contract(address, wagerAbi, alice).join(0, { value })).wait();
-      await (await new ethers.Contract(address, wagerAbi, bob).join(1, { value })).wait();
+      await (await new ethers.Contract(bookAddress, abi, alice).join(wagerId, 0, { value })).wait();
+      await (await new ethers.Contract(bookAddress, abi, bob).join(wagerId, 1, { value })).wait();
 
       // summary() is what readWagerState() reads.
-      const locked = await new ethers.Contract(address, wagerAbi, provider).summary();
-      expect(Number(locked[0])).toBe(1); // Locked
+      const locked = await new ethers.Contract(bookAddress, abi, provider).summary(wagerId);
+      expect(Number(locked[0])).toBe(2); // Locked
       expect(Number(locked[2])).toBe(2); // participants
       expect(Number(locked[4])).toBe(2); // a majority of two is two
 
-      // Move past the event deadline and settle by attestation.
       await provider.send("evm_increaseTime", [300]);
       await provider.send("evm_mine", []);
 
-      await (await new ethers.Contract(address, wagerAbi, alice).attest(0)).wait();
-      await (await new ethers.Contract(address, wagerAbi, bob).attest(0)).wait();
+      await (await new ethers.Contract(bookAddress, abi, alice).attest(wagerId, 0)).wait();
+      await (await new ethers.Contract(bookAddress, abi, bob).attest(wagerId, 0)).wait();
 
-      const settled = await new ethers.Contract(address, wagerAbi, provider).summary();
-      expect(Number(settled[0])).toBe(2); // Settled
+      const settled = await new ethers.Contract(bookAddress, abi, provider).summary(wagerId);
+      expect(Number(settled[0])).toBe(3); // Settled
       expect(Number(settled[1])).toBe(0); // side 0 won
 
-      // Alice takes the pot minus the 1% fee, plus her bond back.
       const pot = centsToWei(stakeCents) * 2n;
       const fee = (pot * 100n) / 10_000n;
-      const credits = await new ethers.Contract(address, wagerAbi, provider).credits(alice.address);
+      const credits = await new ethers.Contract(bookAddress, abi, provider).credits(alice.address);
       expect(credits).toBe(pot - fee + centsToWei(bondCents));
 
       const before = await provider.getBalance(alice.address);
-      await (await new ethers.Contract(address, wagerAbi, alice).withdraw()).wait();
+      await (await new ethers.Contract(bookAddress, abi, alice).withdraw()).wait();
       expect(await provider.getBalance(alice.address)).toBeGreaterThan(before);
     },
     120_000

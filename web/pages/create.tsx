@@ -7,7 +7,7 @@ import { encodeFunctionData } from "viem";
 import { Layout, Banner } from "../components/Layout";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { useWallet } from "../lib/useWallet";
-import { wagerFactoryAbi } from "../lib/abi";
+import { wagerBookAbi } from "../lib/abi";
 
 const EXAMPLES = [
   "$25 each that Texas beats Ohio State",
@@ -72,7 +72,7 @@ export default function Create() {
     try {
       const res = await api.post<{
         wager: Wager;
-        deploy: { factory: string | null; params: Record<string, string | number> };
+        deploy: { book: string | null; params: Record<string, string | number> };
       }>("/wagers", {
         groupId: groupId || undefined,
         proposition,
@@ -90,10 +90,10 @@ export default function Create() {
       });
       // Deploy from the creator's own account so the contract's `creator` is
       // them — that is who the owner fee split pays.
-      const { factory, params } = res.deploy;
-      if (factory && wallet.isConnected) {
+      const { book, params } = res.deploy;
+      if (book && wallet.isConnected) {
         const data = encodeFunctionData({
-          abi: wagerFactoryAbi,
+          abi: wagerBookAbi,
           functionName: "createWager",
           args: [
             {
@@ -111,10 +111,9 @@ export default function Create() {
             },
           ] as never,
         });
-        await wallet.send([{ to: factory as `0x${string}`, data }]);
-        // The API verifies the deployed address really came from our factory
-        // and carries these terms before it accepts the link.
-        await api.post(`/wagers/${res.wager.id}/attach`, { address: await findDeployed(factory) });
+        await wallet.send([{ to: book as `0x${string}`, data }]);
+        // The API verifies the on-chain terms and creator match before linking.
+        await api.post(`/wagers/${res.wager.id}/link`, { onchainId: await latestWagerId() });
       }
 
       router.push(`/w/${res.wager.id}`);
@@ -125,10 +124,10 @@ export default function Create() {
     }
   }
 
-  /// Reads back the address the factory just created for this account.
-  async function findDeployed(factory: string): Promise<string> {
-    const res = await api.get<{ address: string }>(`/wagers/latest-deployment?factory=${factory}`);
-    return res.address;
+  /// Reads back the id the book just assigned to this account's newest wager.
+  async function latestWagerId(): Promise<number> {
+    const res = await api.get<{ onchainId: number }>("/wagers/latest-onchain-id");
+    return res.onchainId;
   }
 
   if (loading || !user) {

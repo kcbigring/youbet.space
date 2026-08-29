@@ -36,7 +36,8 @@ export interface Wager {
   fundingDeadline: string;
   eventDeadline: string;
   resolutionDeadline: string;
-  address: string | null;
+  /// Id inside the WagerBook contract, once the escrow exists.
+  onchainId: number | null;
   creatorId: string;
   creator: User;
   group: { id: string; name: string } | null;

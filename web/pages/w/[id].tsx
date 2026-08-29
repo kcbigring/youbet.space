@@ -8,7 +8,8 @@ import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
 import { ConnectWallet } from "../../components/ConnectWallet";
 import { useWallet } from "../../lib/useWallet";
-import { wagerAbi } from "../../lib/abi";
+import { wagerBookAbi } from "../../lib/abi";
+import { wagerBookAddress } from "../../lib/contracts";
 
 interface Comment {
   id: string;
@@ -88,9 +89,12 @@ export default function WagerDetail() {
     ]);
   }
 
-  const wagerCall = (address: string, fn: "attest" | "concede" | "withdraw", args: readonly unknown[] = []) => ({
-    to: address as `0x${string}`,
-    data: encodeFunctionData({ abi: wagerAbi, functionName: fn, args: args as never }),
+  /// Every wager action targets the one book contract, with the wager id as the
+  /// first argument. `withdraw` takes none — credits are global, so a single
+  /// call collects winnings across every wager.
+  const bookCall = (fn: "attest" | "concede" | "withdraw", args: readonly unknown[] = []) => ({
+    to: wagerBookAddress,
+    data: encodeFunctionData({ abi: wagerBookAbi, functionName: fn, args: args as never }),
   });
 
   if (loading || !user || !detail) {
@@ -203,7 +207,7 @@ export default function WagerDetail() {
                   className="side-option"
                   disabled={busy || wallet.busy}
                   onClick={() =>
-                    act(() => onChain(wager.id, [wagerCall(wager.address!, "attest", [index])]))
+                    act(() => onChain(wager.id, [bookCall("attest", [BigInt(wager.onchainId!), index])]))
                   }
                 >
                   {label} won
@@ -212,7 +216,7 @@ export default function WagerDetail() {
             <button
               className="ghost block"
               disabled={busy || wallet.busy}
-              onClick={() => act(() => onChain(wager.id, [wagerCall(wager.address!, "concede")]))}
+              onClick={() => act(() => onChain(wager.id, [bookCall("concede", [BigInt(wager.onchainId!)])]))}
             >
               I lost — pay them now
             </button>
@@ -248,9 +252,9 @@ export default function WagerDetail() {
           className="block"
           style={{ marginTop: 12 }}
           disabled={busy || wallet.busy}
-          onClick={() => act(() => onChain(wager.id, [wagerCall(wager.address!, "withdraw")]))}
+          onClick={() => act(() => onChain(wager.id, [bookCall("withdraw")]))}
         >
-          Claim what you are owed
+          Claim everything you are owed
         </button>
       )}
 
@@ -319,9 +323,9 @@ export default function WagerDetail() {
 
       <Banner>{error}</Banner>
 
-      {wager.address && (
+      {wager.onchainId && (
         <p className="small muted mono break" style={{ marginTop: 24 }}>
-          Escrow: {wager.address}
+          Wager #{wager.onchainId} · {wagerBookAddress}
         </p>
       )}
     </Layout>

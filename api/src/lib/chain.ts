@@ -48,18 +48,15 @@ export function contractAt(name: string, address: string, runner?: ethers.Contra
   return new ethers.Contract(address, artifact(name).abi, runner ?? getProvider());
 }
 
-export function getFactory(runner?: ethers.ContractRunner) {
-  if (!env.factoryAddress) {
-    throw new ApiError(503, "FACTORY_ADDRESS is not configured. Deploy the contracts first.");
+/// Every wager lives in one contract, keyed by id.
+export function getBook(runner?: ethers.ContractRunner) {
+  if (!env.wagerBookAddress) {
+    throw new ApiError(503, "WAGER_BOOK_ADDRESS is not configured. Deploy the contracts first.");
   }
-  return contractAt("WagerFactory", env.factoryAddress, runner);
+  return contractAt("WagerBook", env.wagerBookAddress, runner);
 }
 
-export function getWager(address: string, runner?: ethers.ContractRunner) {
-  return contractAt("Wager", address, runner);
-}
-
-export const isChainConfigured = () => Boolean(env.factoryAddress && env.deployerPrivateKey);
+export const isChainConfigured = () => Boolean(env.wagerBookAddress);
 
 /// Hash of the immutable terms, mirrored on-chain so the record cannot be edited
 /// after funds lock (execution plan §16).
@@ -84,24 +81,23 @@ export function hashTerms(terms: {
   return ethers.keccak256(ethers.toUtf8Bytes(canonical));
 }
 
-const STATUS_BY_INDEX = ["OPEN", "LOCKED", "SETTLED", "REFUNDED", "CANCELLED"] as const;
+// Index 0 is Status.None — an id that was never created.
+const STATUS_BY_INDEX = ["NONE", "OPEN", "LOCKED", "SETTLED", "REFUNDED", "CANCELLED"] as const;
 export type OnchainStatus = (typeof STATUS_BY_INDEX)[number];
 
 /// Full participant-level state. This is what makes the chain authoritative:
 /// the API mirrors it rather than trusting a client to report what it did.
-export async function readWagerParticipants(address: string) {
-  const wager = getWager(address);
-  const addresses: string[] = await wager.getParticipants();
+export async function readWagerParticipants(wagerId: string) {
+  const book = getBook();
+  const addresses: string[] = await book.getParticipants(wagerId);
 
   return Promise.all(
     addresses.map(async (participant) => {
-      const [side, hasResolved, resolutionChoice, conceded, credits] = await Promise.all([
-        wager.side(participant),
-        wager.hasResolved(participant),
-        wager.resolutionChoice(participant),
-        wager.conceded(participant),
-        wager.credits(participant),
-      ]);
+      // One call per participant instead of five.
+      const [isParticipant, side, hasResolved, resolutionChoice, conceded] =
+        await book.participantState(wagerId, participant);
+      const credits = await book.credits(participant);
+      void isParticipant;
       return {
         address: participant as string,
         side: Number(side),
@@ -115,9 +111,9 @@ export async function readWagerParticipants(address: string) {
   );
 }
 
-export async function readWagerState(address: string) {
-  const wager = getWager(address);
-  const [status, winningSide, participants, pot, required, forSide0, forSide1] = await wager.summary();
+export async function readWagerState(wagerId: string) {
+  const [status, winningSide, participants, pot, required, forSide0, forSide1] =
+    await getBook().summary(wagerId);
   return {
     status: STATUS_BY_INDEX[Number(status)] as OnchainStatus,
     winningSide: Number(winningSide),

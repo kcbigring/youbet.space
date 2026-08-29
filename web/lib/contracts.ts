@@ -1,16 +1,19 @@
-import { wagerAbi, wagerFactoryAbi } from "./abi";
+import { wagerBookAbi } from "./abi";
 
-export { wagerAbi, wagerFactoryAbi };
+export { wagerBookAbi };
 
-export const factoryAddress = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || "") as `0x${string}`;
+/// One contract holds every wager, keyed by id — so there is a single address
+/// for a paymaster to allowlist, which is what makes sponsored `join` possible.
+export const wagerBookAddress = (process.env.NEXT_PUBLIC_WAGER_BOOK_ADDRESS || "") as `0x${string}`;
 
-export const hasFactory = /^0x[a-fA-F0-9]{40}$/.test(factoryAddress);
+export const hasWagerBook = /^0x[a-fA-F0-9]{40}$/.test(wagerBookAddress);
 
-/// Mirrors Wager.Status on-chain.
+/// Mirrors WagerBook.Status on-chain. Index 0 is an id that was never created.
 export const WagerStatus = {
-  Open: 0,
-  Locked: 1,
-  Settled: 2,
-  Refunded: 3,
-  Cancelled: 4,
+  None: 0,
+  Open: 1,
+  Locked: 2,
+  Settled: 3,
+  Refunded: 4,
+  Cancelled: 5,
 } as const;

@@ -20,8 +20,8 @@ const NETWORKS = {
   base: { chainId: 8453, rpc: process.env.BASE_RPC || "https://mainnet.base.org", explorer: "https://basescan.org" },
 };
 
-// Measured with `hardhat test`; see README. Deploying all four contracts.
-const DEPLOY_GAS = 5_237_626n;
+// Measured; see README. Deploying all four contracts.
+const DEPLOY_GAS = 4_780_000n;
 
 async function main() {
   const name = process.argv[2] || "base_sepolia";

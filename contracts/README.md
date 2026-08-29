@@ -54,80 +54,54 @@ fee logic and never reach the treasury — forfeited bonds are redistributed to
 participants who met their resolution duty, which keeps the house economically
 neutral on whether a wager becomes disputed.
 
-## One contract per wager
+## Why one contract holds every wager
 
-Every wager is its own deployed `Wager` contract. That buys real isolation — a
-bug in one wager cannot touch another's escrow — and it costs more than it
-first appears. Measured, not estimated:
+`WagerBook` stores every wager in a single contract, keyed by id, rather than
+deploying a `Wager` contract per wager. That was a deliberate reversal — the
+earlier design is in git history — and it was driven by gas sponsorship, not gas.
 
-| | per-contract (today) | single contract | |
+**Sponsorship.** Paymasters pay for user transactions by allowlisting contract
+addresses, because sponsoring arbitrary calls means anyone can drain the budget.
+A per-wager contract gets a fresh address every time, so `join` could never be
+allowlisted in advance. That put the unsponsored call on the one person who
+needs sponsorship most: the friend who just tapped an invite link, has no wallet
+and no ETH. Creating a wager — done by the already-committed user — was the only
+thing that would have worked. One fixed address makes every call sponsorable.
+
+**Gas**, measured on the real contracts:
+
+| | per-contract | WagerBook | |
 | --- | --- | --- | --- |
-| `createWager` | 2,009,893 gas | 125,501 gas | **16× cheaper** |
+| create a wager | 2,009,893 gas | 164,190 gas | **12× cheaper** |
 
-`Wager`'s runtime bytecode is 9,074 bytes. At 200 gas per byte, **1,814,800 of
-those 2 million gas — 90% — is paying to store another identical copy of the
-same code.** Every wager redeploys the same logic.
+`Wager`'s bytecode was 9,074 bytes, and at 200 gas per byte, 1.8M of those 2M
+gas was re-storing an identical copy of the same code for every wager.
 
-### The gas is not the real problem
+**A smaller win:** `credits` are global rather than per-wager, so one
+`withdraw()` collects winnings, refunds and bonds across every wager a user has
+— one passkey prompt instead of one per wager.
 
-On Base the difference is pennies at normal gas prices, and only starts to
-matter under load:
+### What this gives up
 
-| gas price | per-contract | single contract |
-| --- | --- | --- |
-| 0.01 gwei | $0.06 | $0.004 |
-| 0.5 gwei | $3.02 | $0.19 |
-| 2 gwei | $12.06 | $0.75 |
+Isolation. Each `Wager` previously held only its own stakes, so an accounting
+bug was bounded to that wager. Now every wager's funds sit in one contract and a
+storage bug could reach all of them.
 
-Worth having, but not on its own a reason to change anything.
+That risk is narrower than it sounds — the logic was identical across every
+deployed copy, so a payout bug was always in all of them. What is genuinely lost
+is protection against *cross-wager* corruption, which is a specific and testable
+class. `test/wagerbook.test.js` covers it directly: settling one wager must not
+touch another's state, participants or credits.
 
-### Gas sponsorship is the real problem
+The pull-payment accounting carried over unchanged, which is the part that most
+needs to be right.
 
-Paymasters decide whether to pay for a UserOperation, and the standard policy
-primitive — CDP's included — is an **allowlist of contract addresses**, because
-sponsoring arbitrary calls means anyone can drain your gas budget.
+### Cost of the change
 
-The factory has one fixed address, so `createWager` allowlists fine. But every
-wager gets a **fresh address**, so `join`, `attest`, `concede` and `withdraw`
-can never be allowlisted ahead of time. Sponsorship covers creating a wager and
-then stops.
+Deployment is ~4.8M gas for all four contracts, against 5.2M before. `WagerBook`
+compiles to 13,923 bytes, comfortably under the 24,576-byte contract limit, with
+room for the resolution logic to grow.
 
-That gap lands in the worst possible place. The person who needs sponsorship
-most is the friend who just tapped a link, has no wallet, no ETH, and no reason
-to care about any of this — and joining is exactly the call that cannot be
-sponsored. Creating a wager, which the already-committed user does, is the one
-thing that works.
-
-Workarounds exist and all leak:
-
-- Watch `WagerCreated` and push each new address into the policy via API. It
-  races the user's next transaction, grows the policy without bound, and adds a
-  background service whose failure silently breaks funding.
-- Use a provider with programmatic or webhook-based sponsorship instead of
-  address allowlists. Workable, but you are now running that decision service.
-
-### The alternative
-
-A single `WagerBook` contract holding wagers by id: `join(wagerId, side)`
-instead of `wager.join(side)`. One address to allowlist, sponsorship works
-everywhere, 16× less gas per wager, one place to read state from.
-
-What it gives up is isolation. Today each `Wager` holds only its own stakes, so
-an accounting bug is bounded by that one wager. In a shared contract every
-wager's funds sit in one place and a storage bug reaches all of them. That is a
-genuine trade, and the reason this has not simply been changed.
-
-The pull-payment accounting already in `Wager` carries over unchanged, which is
-the part that most needs to be right.
-
-### When to decide
-
-Right now there are zero wagers on-chain, so switching is a pure code change.
-
-Later is harder but not catastrophic: deployed wagers are immutable and cannot
-be migrated, so the API and web would carry both shapes until every open wager
-settles. Since the resolution window is 72 hours by default, that is about a
-week of dual-path code plus a freeze, not an indefinite migration.
-
-The cost of waiting is real but bounded. The cost of launching a paymaster that
-silently fails to sponsor the invite path is the one to avoid.
+The contracts compile with `viaIR: true`: holding every wager's state means
+several functions carry more locals than the legacy pipeline can keep on the
+stack.

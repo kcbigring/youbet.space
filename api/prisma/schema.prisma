@@ -172,8 +172,9 @@ model Wager {
   status      WagerStatus @default(DRAFT)
   winningSide Int?
 
-  // On-chain linkage.
-  address       String? @unique
+  // On-chain linkage. Wagers live in one WagerBook contract keyed by id, so
+  // there is no per-wager address any more.
+  onchainId     Int?    @unique
   termsHash     String?
   txHash        String?
   chainId       Int?

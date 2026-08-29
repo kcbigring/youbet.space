@@ -12,6 +12,10 @@ module.exports = {
     version: "0.8.24",
     settings: {
       optimizer: { enabled: true, runs: 200 },
+      // WagerBook holds every wager's state, so several functions carry more
+      // locals than the legacy pipeline can keep on the stack. The IR pipeline
+      // handles that and optimizes better; it costs compile time.
+      viaIR: true,
       // Base runs the Cancun opcodes; keep the target explicit so local builds match.
       evmVersion: "cancun",
     },
