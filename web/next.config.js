@@ -13,16 +13,15 @@ const nextConfig = {
     return [{ source: "/api/:path*", destination: `${API_ORIGIN}/:path*` }];
   },
   webpack: (config) => {
-    // We ship one connector: Coinbase Smart Wallet, a passkey-owned ERC-4337
-    // account. The connectors barrel imports every other connector too, so stub
-    // their optional peer dependencies rather than installing wallets we do not
-    // support. These are declared optional by @wagmi/connectors itself.
+    // The connectors barrel imports every connector, so stub the optional peer
+    // dependencies of the ones we do not ship. @base-org/account is NOT in this
+    // list — that is the wallet we actually use, and stubbing it made the
+    // connector resolve to an empty module and throw "i is not a function".
     for (const optional of [
       "@walletconnect/ethereum-provider",
       "@metamask/connect-evm",
       "@safe-global/safe-apps-provider",
       "@safe-global/safe-apps-sdk",
-      "@base-org/account",
       "accounts",
     ]) {
       config.resolve.alias[optional] = false;
