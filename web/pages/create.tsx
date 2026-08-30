@@ -40,7 +40,6 @@ export default function Create() {
   const [side, setSide] = useState(0);
   const [groupId, setGroupId] = useState("");
   const [deadline, setDeadline] = useState(toLocalInput(null));
-  const [phones, setPhones] = useState("");
   const wallet = useWallet();
 
   useEffect(() => {
@@ -94,10 +93,6 @@ export default function Create() {
         resolutionMethod: parsed?.resolution ?? "ATTESTATION",
         oracleSource: parsed?.oracleSource ?? undefined,
         category: parsed?.category ?? undefined,
-        invitePhones: phones
-          .split(/[,\n]/)
-          .map((p) => p.trim())
-          .filter(Boolean),
       });
       // Deploy from the creator's own account so the contract's `creator` is
       // them — that is who the owner fee split pays.
@@ -260,21 +255,6 @@ export default function Create() {
               </select>
             </div>
           )}
-
-          <div className="field">
-            <label htmlFor="phones">Who are you challenging? (optional)</label>
-            <textarea
-              id="phones"
-              placeholder="(512) 555-1234, (512) 555-9876"
-              value={phones}
-              onChange={(e) => setPhones(e.target.value)}
-              style={{ minHeight: 64 }}
-            />
-            <p className="small muted" style={{ margin: "6px 0 0" }}>
-              They&rsquo;ll show as invited. You send them the link yourself on the next screen
-              &mdash; a text from you lands better than one from us.
-            </p>
-          </div>
 
           <div className="card" style={{ marginTop: 18 }}>
             <div className="between small">
