@@ -1,6 +1,6 @@
-import { wagerBookAbi, testUSDAbi } from "./abi";
+import { wagerBookAbi, playDollarAbi } from "./abi";
 
-export { wagerBookAbi, testUSDAbi };
+export { wagerBookAbi, playDollarAbi };
 
 /// Stakes are denominated in a six-decimal dollar token — test dollars on
 /// testnet, USDC on mainnet — so "$25" stays $25 rather than tracking ETH.

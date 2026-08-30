@@ -41,7 +41,7 @@ router.get(
     let balanceUnits = "0";
     try {
       if (env.stakeTokenAddress) {
-        const token = contractAt("TestUSD", env.stakeTokenAddress);
+        const token = contractAt("PlayDollar", env.stakeTokenAddress);
         const balance: bigint = await token.balanceOf(address);
         balanceUnits = balance.toString();
         balanceCents = unitsToCents(balance);

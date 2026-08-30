@@ -20,7 +20,7 @@ async function deployStack() {
   const resolvers = await (await ethers.getContractFactory("ResolverRegistry")).deploy(deployer.address);
   await resolvers.setResolver(oracle.address, true, "test-sports-feed");
 
-  const token = await (await ethers.getContractFactory("TestUSD")).deploy(deployer.address);
+  const token = await (await ethers.getContractFactory("PlayDollar")).deploy(deployer.address);
 
   const book = await (await ethers.getContractFactory("WagerBook")).deploy(
     deployer.address,

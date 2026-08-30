@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { encodeFunctionData } from "viem";
 import { useWallet } from "../lib/useWallet";
-import { hasStakeToken, stakeTokenAddress, testUSDAbi } from "../lib/contracts";
+import { hasStakeToken, stakeTokenAddress, playDollarAbi } from "../lib/contracts";
 import { Banner } from "./Layout";
 
 /// Test money for the alpha. The plan calls for handing everyone play funds and
@@ -23,7 +23,7 @@ export function TestMoney({ onFunded }: { onFunded?: () => void }) {
       await wallet.send([
         {
           to: stakeTokenAddress,
-          data: encodeFunctionData({ abi: testUSDAbi, functionName: "drip", args: [] }),
+          data: encodeFunctionData({ abi: playDollarAbi, functionName: "drip", args: [] }),
         },
       ]);
       setDone(true);

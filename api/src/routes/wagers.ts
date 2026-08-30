@@ -414,7 +414,7 @@ router.post(
 /// rather than the two that approve-then-transfer normally implies.
 function joinCalls(onchainId: number, side: number, stakeCents: number, bondCents: number) {
   const book = new ethers.Interface(artifact("WagerBook").abi);
-  const token = new ethers.Interface(artifact("TestUSD").abi);
+  const token = new ethers.Interface(artifact("PlayDollar").abi);
   const owed = centsToUnits(stakeCents) + centsToUnits(bondCents);
 
   return [

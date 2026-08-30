@@ -1653,7 +1653,7 @@ export const groupRegistryAbi = [
   }
 ] as const;
 
-export const testUSDAbi = [
+export const playDollarAbi = [
   {
     "inputs": [
       {

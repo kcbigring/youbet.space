@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title TestUSD
-/// @notice A dollar-denominated token for the test-money alpha, standing in for
-///         USDC. Six decimals so the same amounts work unchanged against real
-///         USDC on mainnet, where this contract is simply not deployed.
+/// @title PlayDollar
+/// @notice Play money for the alpha, denominated in dollars but worth nothing.
+///         Six decimals so the same amounts work unchanged against real USDC
+///         later, by swapping the token address and deploying none of this.
+/// @dev Deployed on mainnet as well as testnet, because the wallet people
+///      actually use only works on mainnet. Nothing of value is ever wagered:
+///      this token has no market, no backing, and anyone can mint it. The name
+///      and symbol say so plainly, and deliberately avoid "USD" so it can never
+///      be mistaken for a stablecoin.
 /// @dev Anyone may `drip()` themselves a fixed allowance once per interval. This
 ///      exists only so a friend arriving from an invite link has something to
 ///      bet with; it has no place on a network where the token means anything.
-contract TestUSD {
-    string public constant name = "youbet Test Dollar";
-    string public constant symbol = "tUSD";
+contract PlayDollar {
+    string public constant name = "youbet Play Money (no value)";
+    string public constant symbol = "PLAY";
     uint8 public constant decimals = 6;
 
     uint256 public totalSupply;

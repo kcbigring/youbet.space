@@ -24,10 +24,10 @@ async function main() {
   if (tokenAddress) {
     console.log(`Stake token:      ${tokenAddress} (existing)`);
   } else {
-    const testUsd = await (await ethers.getContractFactory("TestUSD")).deploy(owner);
+    const testUsd = await (await ethers.getContractFactory("PlayDollar")).deploy(owner);
     await testUsd.waitForDeployment();
     tokenAddress = await testUsd.getAddress();
-    console.log(`TestUSD:          ${tokenAddress}`);
+    console.log(`PlayDollar:          ${tokenAddress}`);
   }
 
   const treasury = await (await ethers.getContractFactory("Treasury")).deploy(owner);
