@@ -70,7 +70,7 @@ async function main() {
   console.log("");
 
   if (balance >= recommended) {
-    console.log("READY — run: npm run deploy:base");
+    console.log(`READY — run: npm run ${name === "base" ? "deploy:mainnet" : "deploy:sepolia"}`);
   } else if (balance >= cost) {
     console.log("Enough to deploy, but thin. Consider topping up.");
   } else {

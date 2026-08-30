@@ -17,7 +17,7 @@ const file = path.join(repoRoot, "deployments", `${network}.json`);
 
 if (!fs.existsSync(file)) {
   console.error(`No deployment found at ${path.relative(process.cwd(), file)}.`);
-  console.error(`Deploy first:  npm run deploy:base`);
+  console.error(`Deploy first:  npm run deploy:sepolia (or deploy:mainnet)`);
   process.exit(1);
 }
 

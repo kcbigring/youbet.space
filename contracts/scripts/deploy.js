@@ -20,7 +20,16 @@ async function main() {
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Balance:  ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
 
+  // An address configured for one network means nothing on another. Reusing a
+  // token address without checking it exists here once produced a WagerBook on
+  // mainnet pointing at a Sepolia address with no code, where every join would
+  // have reverted.
   let tokenAddress = STAKE_TOKEN;
+  if (tokenAddress && (await ethers.provider.getCode(tokenAddress)) === "0x") {
+    console.log(`Stake token:      ${tokenAddress} has no code on ${network.name}; deploying a new one`);
+    tokenAddress = null;
+  }
+
   if (tokenAddress) {
     console.log(`Stake token:      ${tokenAddress} (existing)`);
   } else {

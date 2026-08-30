@@ -5,12 +5,12 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy:base": "hardhat run scripts/deploy.js --network base_sepolia && node scripts/sync-env.js base_sepolia",
     "export-abi": "node scripts/export-abi.js",
     "sync-env": "node scripts/sync-env.js",
-    "deploy:base-mainnet": "hardhat run scripts/deploy.js --network base && node scripts/sync-env.js base",
     "status": "node scripts/status.js",
-    "faucet": "node scripts/faucet.js"
+    "faucet": "node scripts/faucet.js",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network base_sepolia && node scripts/sync-env.js base_sepolia",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network base && node scripts/sync-env.js base"
   },
   "devDependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",
