@@ -23,6 +23,15 @@ export const config: Config = createConfig({
     // resolves the wallet host from the chain itself.
     baseAccount({
       appName: "youbet.space",
+      // The wallet host is picked per environment, not per chain: the default
+      // production host serves mainnet only and answers a Base Sepolia
+      // transaction with "this chain is not supported". Testnets need the dev
+      // host, and the account lives on whichever host created it — so both
+      // sign-up and signing have to point at the same one.
+      preference:
+        activeChain.id === baseSepolia.id
+          ? { walletUrl: "https://keys-dev.coinbase.com/connect" }
+          : undefined,
     }),
   ],
   transports: {
