@@ -16,8 +16,18 @@ for (const f of [path.join(repoRoot, ".env.local"), path.join(repoRoot, ".env")]
 }
 
 const NETWORKS = {
-  base_sepolia: { chainId: 84532, rpc: process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org", explorer: "https://sepolia.basescan.org" },
-  base: { chainId: 8453, rpc: process.env.BASE_RPC || "https://mainnet.base.org", explorer: "https://basescan.org" },
+  base_sepolia: {
+    chainId: 84532,
+    rpc: process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",
+    explorer: "https://sepolia.basescan.org",
+    funding: "Faucet: https://portal.cdp.coinbase.com/products/faucet (Base Sepolia, ETH)",
+  },
+  base: {
+    chainId: 8453,
+    rpc: process.env.BASE_RPC || "https://mainnet.base.org",
+    explorer: "https://basescan.org",
+    funding: "Send real ETH on Base mainnet. Bridge at https://bridge.base.org, or withdraw from an exchange to the Base network.",
+  },
 };
 
 // Measured; see README. Deploying all four contracts.
@@ -64,8 +74,8 @@ async function main() {
   } else if (balance >= cost) {
     console.log("Enough to deploy, but thin. Consider topping up.");
   } else {
-    console.log(`NOT FUNDED — send Base Sepolia ETH to the deployer address above.`);
-    console.log(`  Faucet:   https://portal.cdp.coinbase.com/products/faucet`);
+    console.log(`NOT FUNDED — fund the deployer address above.`);
+    console.log(`  ${net.funding}`);
     console.log(`  Explorer: ${net.explorer}/address/${wallet.address}`);
   }
 
