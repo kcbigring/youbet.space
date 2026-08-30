@@ -1,6 +1,6 @@
 import { createConfig, http, type Config } from "wagmi";
 import { base, baseSepolia } from "viem/chains";
-import { coinbaseWallet } from "wagmi/connectors";
+import { baseAccount } from "wagmi/connectors";
 
 /// Wallets are ERC-4337 smart accounts owned by a passkey. The key lives in the
 /// user's device keychain, so the platform never holds it and there is no seed
@@ -14,20 +14,15 @@ export const activeChain =
 
 export const config: Config = createConfig({
   chains: [baseSepolia, base],
+  // We ship one wallet; scanning for injected providers only adds ways to fail.
+  multiInjectedProviderDiscovery: false,
   connectors: [
-    coinbaseWallet({
+    // Base Account, Coinbase's current SDK. The older wallet-sdk had to be
+    // pointed at a key service by hand — production is mainnet-only, and the
+    // dev host it left for testnets proved unreliable in practice. This one
+    // resolves the wallet host from the chain itself.
+    baseAccount({
       appName: "youbet.space",
-      preference: {
-        // Force the smart-account flow: no browser extension, no seed phrase,
-        // a passkey is the only credential.
-        options: "smartWalletOnly",
-        // Coinbase runs two key services and the production one is mainnet
-        // only — it answers a Base Sepolia request with "this chain is not
-        // supported". Testnets have to be pointed at the dev host.
-        ...(activeChain.id === baseSepolia.id
-          ? { keysUrl: "https://keys-dev.coinbase.com/connect" }
-          : {}),
-      },
     }),
   ],
   transports: {
