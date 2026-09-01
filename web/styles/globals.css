@@ -573,3 +573,17 @@ button.small { padding: 8px 12px; font-size: 13px; }
   color: var(--accent);
   margin-bottom: 6px;
 }
+
+/* Being early is the pitch here, so the section gets its own ground. */
+.landing-founding {
+  background: var(--surface);
+  border-top: 1px solid var(--accent-dim);
+  border-bottom: 1px solid var(--accent-dim);
+  max-width: none;
+}
+
+.landing-founding > * {
+  max-width: 46rem;
+  margin-left: auto;
+  margin-right: auto;
+}

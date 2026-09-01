@@ -142,6 +142,19 @@ export function Landing() {
         </div>
       </section>
 
+      <section className="landing-section landing-founding">
+        <h2 className="landing-h2">The first hundred get a head start</h2>
+        <p className="landing-body">
+          We&rsquo;re running on play money while this is invite-only, and the earliest
+          people in get more of it. The <b>first 10</b> to join get ten times the
+          founding stake of the <b>next 90</b>. After that it&rsquo;s the ordinary daily top-up.
+        </p>
+        <p className="landing-body">
+          It&rsquo;s counted on-chain, so your number is whatever it says it is &mdash; you&rsquo;ll
+          see it before you claim.
+        </p>
+      </section>
+
       <section className="landing-section landing-close">
         <h2 className="landing-h2">Settle it.</h2>
         <p className="landing-body">
