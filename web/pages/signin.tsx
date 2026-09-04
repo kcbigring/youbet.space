@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { api, setToken, ApiError } from "../lib/api";
 import { Banner } from "../components/Layout";
 import { Logo } from "../components/Logo";
+import { normalizePhone } from "../lib/phone";
 import {
   confirmVerificationCode,
   phoneVerificationAvailable,
@@ -57,7 +58,11 @@ export default function SignIn() {
   const requestCode = () =>
     run(async () => {
       if (phoneVerificationAvailable) {
-        const e164 = phone.trim().startsWith("+") ? phone.trim() : `+1${phone.replace(/\D/g, "")}`;
+        // Not a bare `+1` prefix: someone typing their own number with the
+        // leading 1 would get "+1 1720…", which is nobody, and the account
+        // identity would not match the invite that sent them here.
+        const e164 = normalizePhone(phone);
+        if (!e164) throw new Error("That phone number does not look right.");
         try {
           setConfirmation(await sendVerificationCode(e164, "recaptcha-slot"));
           setPhone(e164);
@@ -93,7 +98,11 @@ export default function SignIn() {
       setToken(res.token);
 
       // An invite drops you straight into whatever brought you here.
-      const next = typeof router.query.next === "string" ? router.query.next : "/";
+      // A dynamic route that has not finished resolving reads as its own
+      // template, so `next` can arrive as a literal "/w/[id]" that Next refuses
+      // to navigate to. Never trust it to be a real path.
+      const asked = typeof router.query.next === "string" ? router.query.next : "/";
+      const next = asked.startsWith("/") && !/[[\]]/.test(asked) ? asked : "/";
       const destination = res.landing?.wagerId
         ? `/w/${res.landing.wagerId}`
         : res.landing?.groupId

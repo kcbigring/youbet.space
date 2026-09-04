@@ -19,20 +19,29 @@ export function useSession({ redirect = true } = {}) {
   useEffect(() => {
     let cancelled = false;
 
+    /// Where to send them back to after signing in.
+    ///
+    /// Not `router.asPath`: on a statically optimised dynamic route it is the
+    /// template — a literal "/w/[id]" — until the router finishes resolving,
+    /// and this effect runs before that. Following an invite link therefore
+    /// signed you in and then failed to navigate anywhere. `window.location` is
+    /// the real URL from the first client render.
+    const here = window.location.pathname + window.location.search;
+
     async function load() {
       const token = getToken();
       if (!cancelled) setHasToken(Boolean(token));
 
       if (!token) {
         if (!cancelled) setLoading(false);
-        if (redirect) router.replace(`/signin?next=${encodeURIComponent(router.asPath)}`);
+        if (redirect) router.replace(`/signin?next=${encodeURIComponent(here)}`);
         return;
       }
       try {
         const res = await api.get<{ user: User }>("/auth/me");
         if (!cancelled) setUser(res.user);
       } catch {
-        if (redirect) router.replace(`/signin?next=${encodeURIComponent(router.asPath)}`);
+        if (redirect) router.replace(`/signin?next=${encodeURIComponent(here)}`);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -42,8 +51,8 @@ export function useSession({ redirect = true } = {}) {
     return () => {
       cancelled = true;
     };
-    // router.asPath is intentionally excluded: re-running on every navigation
-    // would refetch the session on each screen change.
+    // The current path is intentionally excluded: re-running on every
+    // navigation would refetch the session on each screen change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redirect]);
 
