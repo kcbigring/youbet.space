@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
+import { FoundingSlots } from "./FoundingSlots";
 
 /// The public front door. Someone arriving from a friend's text has no idea what
 /// this is, and the honest pitch is short: it is the bet you already make,
@@ -153,6 +154,7 @@ export function Landing() {
           It&rsquo;s counted on-chain, so your number is whatever it says it is &mdash; you&rsquo;ll
           see it before you claim.
         </p>
+        <FoundingSlots />
       </section>
 
       <section className="landing-section landing-close">

@@ -3,7 +3,13 @@ import fs from "fs";
 import path from "path";
 import { env } from "../env";
 import { ApiError } from "./errors";
-import { wagerBookAbi, groupRegistryAbi, resolverRegistryAbi, treasuryAbi } from "../abi";
+import {
+  wagerBookAbi,
+  groupRegistryAbi,
+  resolverRegistryAbi,
+  treasuryAbi,
+  playDollarAbi,
+} from "../abi";
 
 /// ABIs are generated into src/abi.ts by `npm run export-abi` in contracts/ and
 /// committed, so the running service carries them rather than reading Hardhat's
@@ -13,6 +19,7 @@ const ABIS: Record<string, ethers.InterfaceAbi> = {
   GroupRegistry: groupRegistryAbi as unknown as ethers.InterfaceAbi,
   ResolverRegistry: resolverRegistryAbi as unknown as ethers.InterfaceAbi,
   Treasury: treasuryAbi as unknown as ethers.InterfaceAbi,
+  PlayDollar: playDollarAbi as unknown as ethers.InterfaceAbi,
 };
 
 export function artifact(name: string): { abi: ethers.InterfaceAbi; bytecode: string } {

@@ -8,6 +8,7 @@ import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
 import { ConnectWallet } from "../../components/ConnectWallet";
 import { TestMoney } from "../../components/TestMoney";
+import { FoundingSlots } from "../../components/FoundingSlots";
 import { useWallet } from "../../lib/useWallet";
 import { wagerBookAbi } from "../../lib/abi";
 import { wagerBookAddress } from "../../lib/contracts";
@@ -249,7 +250,8 @@ export default function WagerDetail() {
           </p>
           <div className="stack">
             {/* An invited friend arrives with nothing; this is where they get
-                something to bet with. */}
+                something to bet with, and what being early is worth. */}
+            <FoundingSlots compact />
             <TestMoney />
             {wager.sideLabels.map((label, index) => (
               <button

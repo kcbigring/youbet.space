@@ -7,6 +7,7 @@ import { Layout, Banner } from "../components/Layout";
 import { VerifyPhone } from "../components/VerifyPhone";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { TestMoney } from "../components/TestMoney";
+import { FoundingSlots } from "../components/FoundingSlots";
 import { Standing } from "../components/Standing";
 
 interface Me {
@@ -84,8 +85,11 @@ export default function Wallet() {
               {CHAINS[info.wallet!.chainId] || `Chain ${info.wallet!.chainId}`} · gas is sponsored
             </div>
 
-            <div style={{ marginTop: 12 }}>
-              <TestMoney onFunded={() => router.reload()} />
+            <div style={{ marginTop: 14 }}>
+              <FoundingSlots />
+              <div style={{ marginTop: 12 }}>
+                <TestMoney onFunded={() => router.reload()} />
+              </div>
             </div>
 
             <div className="divider" style={{ margin: "14px 0" }} />
