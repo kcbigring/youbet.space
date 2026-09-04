@@ -123,6 +123,9 @@ export default function WagerDetail() {
     list.filter((p) => p.side === s).length;
 
   const canJoin = wager.status === "OPEN" && me?.state !== "JOINED" && new Date(wager.fundingDeadline) > new Date();
+  /// A bet with nobody opposite is not a bet yet, which is the one thing the
+  /// page should be pushing on.
+  const needsOpponent = wager.status === "OPEN" && sideCount(joined, 1 - (me?.side ?? 0)) === 0;
   const canResolve = wager.status === "LOCKED" && me?.state === "JOINED" && !me.attestedAt;
   const canWithdraw = ["SETTLED", "REFUNDED", "CANCELLED"].includes(wager.status) && me?.state === "JOINED";
 
@@ -174,7 +177,7 @@ export default function WagerDetail() {
         </div>
       )}
 
-      {wager.status === "OPEN" && sideCount(joined, 1 - (me?.side ?? 0)) === 0 && (
+      {needsOpponent && (
         <div style={{ marginTop: 18 }}>
           <ShareInvite
             endpoint={`/wagers/${wager.id}/invites`}
@@ -329,7 +332,10 @@ export default function WagerDetail() {
         </>
       )}
 
-      {wager.status === "OPEN" && (
+      {/* One link, one panel. While the other side is empty the urgent copy up
+          top is the one to show; this is for adding a third or fourth person to
+          a wager that already has both sides covered. */}
+      {wager.status === "OPEN" && !needsOpponent && (
         <>
           <h2>Bring someone in</h2>
           <ShareInvite

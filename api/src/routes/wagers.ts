@@ -259,7 +259,7 @@ router.get(
 router.get(
   "/:id",
   asyncHandler(async (req: AuthedRequest, res) => {
-    const wager = await loadWager(req.params.id, req.userId!);
+    let wager = await loadWager(req.params.id, req.userId!);
     const comments = await prisma.comment.findMany({
       where: { wagerId: wager.id },
       include: { user: { select: { id: true, displayName: true } } },
@@ -269,7 +269,16 @@ router.get(
     let onchain = null;
     if (wager.onchainId) {
       try {
-        onchain = await readWagerState(String(wager.onchainId));
+        // Reconcile on read, rather than trusting the client to have told us.
+        //
+        // A join is a transaction the user sends and we then hear about: the
+        // browser posts to /sync once the batch lands, which can be a minute
+        // or two later. Close the tab, lose signal, or simply navigate away in
+        // that window and the stake sits in escrow while the app still shows
+        // the wager as unfunded — and offers to join it again. The chain is the
+        // authority on who paid, so ask it every time someone looks.
+        onchain = await syncFromChain(wager.id);
+        wager = await loadWager(req.params.id, req.userId!);
       } catch (error) {
         console.warn(`Could not read on-chain state for wager ${wager.onchainId}`, error);
       }
@@ -600,12 +609,17 @@ export async function syncFromChain(wagerId: string) {
     });
     if (!user) continue;
 
+    // Someone reconciled from an INVITED row still funded at some point; the
+    // record we already hold is the better timestamp, but never leave it empty
+    // on a participant the escrow says has paid.
+    const known = wager.participants.find((p) => p.userId === user.id);
+
     await prisma.wagerParticipant.upsert({
       where: { wagerId_userId: { wagerId, userId: user.id } },
       update: {
         side: entry.side,
         state: "JOINED",
-        fundedAt: undefined,
+        fundedAt: known?.fundedAt ?? new Date(),
         conceded: entry.conceded,
         ...(entry.hasResolved ? { attestedAt: new Date(), attestedChoice: entry.resolutionChoice } : {}),
       },
