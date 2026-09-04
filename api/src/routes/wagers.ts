@@ -291,9 +291,34 @@ const linkSchema = z.object({
   txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
 });
 
-/// Links an on-chain wager id to its off-chain record. Verifies the terms and
-/// creator recorded on-chain match ours, so a client cannot point its wager at
-/// someone else's escrow.
+/// Finds a wager this creator already put on-chain for these exact terms.
+///
+/// A create transaction that lands while the follow-up link call is lost —
+/// the tab closed, the network dropped, the read raced inclusion — leaves an
+/// escrow on-chain and a draft off-chain with nothing joining them. Publishing
+/// again would open a second escrow and charge a second sponsored transaction,
+/// so the publish path looks for the orphan first.
+export async function orphanedOnchainId(
+  termsHash: string | null,
+  creatorAddress: string | null
+): Promise<number | null> {
+  if (!termsHash || !creatorAddress || !env.wagerBookAddress) return null;
+
+  const book = getBook();
+  const ids: bigint[] = await book.getWagersByCreator(creatorAddress);
+  // Newest first: a retry is far likelier to be reclaiming its own last attempt.
+  for (const id of [...ids].reverse()) {
+    const onchain = await book.getWager(id);
+    if (onchain.termsHash.toLowerCase() !== termsHash.toLowerCase()) continue;
+    // Identical terms hash to the millisecond is vanishingly unlikely across
+    // two drafts, but linking the wrong escrow would be unrecoverable, so
+    // never hand back one that already belongs to something.
+    const taken = await prisma.wager.findUnique({ where: { onchainId: Number(id) } });
+    if (!taken) return Number(id);
+  }
+  return null;
+}
+
 /// The on-chain parameters for a draft, so a wager created before the creator
 /// had a wallet can still be put on-chain rather than being stranded.
 router.get(
@@ -307,9 +332,16 @@ router.get(
       ? await prisma.group.findUnique({ where: { id: wager.groupId } })
       : null;
 
+    const creator = await prisma.user.findUniqueOrThrow({ where: { id: wager.creatorId } });
+
     res.json({
       ok: true,
       book: env.wagerBookAddress ?? null,
+      /// Set when this draft's escrow already exists on-chain. The client
+      /// should link it rather than send a second create.
+      existingOnchainId: await orphanedOnchainId(wager.termsHash, creator.walletAddress).catch(
+        () => null
+      ),
       params: {
         groupId: String(group?.onchainId ?? 0),
         termsHash: wager.termsHash,
@@ -327,6 +359,9 @@ router.get(
   })
 );
 
+/// Links an on-chain wager id to its off-chain record. Verifies the terms and
+/// creator recorded on-chain match ours, so a client cannot point its wager at
+/// someone else's escrow.
 router.post(
   "/:id/link",
   asyncHandler(async (req: AuthedRequest, res) => {

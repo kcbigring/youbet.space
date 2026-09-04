@@ -11,6 +11,7 @@ import { TestMoney } from "../../components/TestMoney";
 import { FoundingSlots } from "../../components/FoundingSlots";
 import { useWallet } from "../../lib/useWallet";
 import { wagerBookAbi } from "../../lib/abi";
+import { publishWager } from "../../lib/publish";
 import { wagerBookAddress } from "../../lib/contracts";
 
 interface Comment {
@@ -78,36 +79,7 @@ export default function WagerDetail() {
   /// Puts a draft on-chain. A wager created before its author had a wallet
   /// exists only in our database, where it reaches nobody.
   async function publish(id: string) {
-    const res = await api.get<{
-      book: string | null;
-      params: Record<string, string | number>;
-    }>(`/wagers/${id}/deploy-params`);
-    if (!res.book) throw new Error("Wagers are not configured on this network yet.");
-
-    const { params } = res;
-    const data = encodeFunctionData({
-      abi: wagerBookAbi,
-      functionName: "createWager",
-      args: [
-        {
-          groupId: BigInt(params.groupId),
-          termsHash: params.termsHash as `0x${string}`,
-          stake: BigInt(params.stake),
-          bond: BigInt(params.bond),
-          ownerSplitBps: BigInt(params.ownerSplitBps),
-          attestationThresholdBps: BigInt(params.attestationThresholdBps),
-          fundingDeadline: BigInt(params.fundingDeadline),
-          eventDeadline: BigInt(params.eventDeadline),
-          resolutionDeadline: BigInt(params.resolutionDeadline),
-          maxParticipants: Number(params.maxParticipants),
-          resolutionMethod: Number(params.resolutionMethod),
-        },
-      ] as never,
-    });
-
-    await wallet.send([{ to: res.book as `0x${string}`, data }]);
-    const latest = await api.get<{ onchainId: number }>("/wagers/latest-onchain-id");
-    await api.post(`/wagers/${id}/link`, { onchainId: latest.onchainId });
+    await publishWager(id, wallet.send);
   }
 
   /// The API returns the exact calls for joining — approving the stake, then

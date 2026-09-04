@@ -5,7 +5,7 @@
 | Web | Vercel (`youbet-space`) | https://youbet.space |
 | API | Cloud Run (`youbet-506923`, us-central1) | https://youbet-api-843347838760.us-central1.run.app |
 | Database | Neon (via Vercel integration) | pooled at runtime, direct for migrations |
-| Contracts | Base Sepolia | `WagerBook` `0x3Ea3E96189f89C6b198739586C899E2436A16CfA` |
+| Contracts | Base mainnet | `WagerBook` `0xaA0626d80083f8946DA6b4D45C73f42E45Df7228` |
 
 ## Web
 

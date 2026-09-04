@@ -3,11 +3,10 @@ import { useRouter } from "next/router";
 import { api, usd, ApiError } from "../lib/api";
 import { useSession } from "../lib/useSession";
 import type { Group, ParsedWager, Wager } from "../lib/types";
-import { encodeFunctionData } from "viem";
 import { Layout, Banner } from "../components/Layout";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { useWallet } from "../lib/useWallet";
-import { wagerBookAbi } from "../lib/abi";
+import { publishWager } from "../lib/publish";
 
 const EXAMPLES = [
   "$25 each that Texas beats Ohio State",
@@ -96,32 +95,8 @@ export default function Create() {
       });
       // Deploy from the creator's own account so the contract's `creator` is
       // them — that is who the owner fee split pays.
-      const { book, params } = res.deploy;
-      if (!book) throw new Error("Wagers are not configured on this network yet.");
-      if (book && wallet.isConnected) {
-        const data = encodeFunctionData({
-          abi: wagerBookAbi,
-          functionName: "createWager",
-          args: [
-            {
-              groupId: BigInt(params.groupId),
-              termsHash: params.termsHash as `0x${string}`,
-              stake: BigInt(params.stake),
-              bond: BigInt(params.bond),
-              ownerSplitBps: BigInt(params.ownerSplitBps),
-              attestationThresholdBps: BigInt(params.attestationThresholdBps),
-              fundingDeadline: BigInt(params.fundingDeadline),
-              eventDeadline: BigInt(params.eventDeadline),
-              resolutionDeadline: BigInt(params.resolutionDeadline),
-              maxParticipants: Number(params.maxParticipants),
-              resolutionMethod: Number(params.resolutionMethod),
-            },
-          ] as never,
-        });
-        await wallet.send([{ to: book as `0x${string}`, data }]);
-        // The API verifies the on-chain terms and creator match before linking.
-        await api.post(`/wagers/${res.wager.id}/link`, { onchainId: await latestWagerId() });
-      }
+      if (!res.deploy.book) throw new Error("Wagers are not configured on this network yet.");
+      if (wallet.isConnected) await publishWager(res.wager.id, wallet.send);
 
       router.push(`/w/${res.wager.id}`);
     } catch (err) {
@@ -129,12 +104,6 @@ export default function Create() {
     } finally {
       setBusy(false);
     }
-  }
-
-  /// Reads back the id the book just assigned to this account's newest wager.
-  async function latestWagerId(): Promise<number> {
-    const res = await api.get<{ onchainId: number }>("/wagers/latest-onchain-id");
-    return res.onchainId;
   }
 
   if (loading || !user) {
