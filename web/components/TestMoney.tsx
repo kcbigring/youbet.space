@@ -82,23 +82,32 @@ export function TestMoney({
     }
   }
 
+  // The live balance, shown in both states. Stating a figure inside the success
+  // message instead meant a refetch that had not landed yet could announce
+  // "$10,500 added" and "you have $0" in the same breath.
+  const balanceRow = showBalance && balance != null && (
+    <div className="between small">
+      <span className="muted">Your play money</span>
+      <b>{money(balance)}</b>
+    </div>
+  );
+
   if (done) {
-    const added = bonusUsd && total ? `${money(total)} added — you're number ${position} to join.` : "Play money added.";
     return (
-      <Banner kind="info">
-        {showBalance && balance != null ? `${added} You have ${money(balance)}.` : added}
-      </Banner>
+      <div className="stack">
+        {balanceRow}
+        <Banner kind="info">
+          {bonusUsd && total
+            ? `${money(total)} added — you're number ${position} to join.`
+            : "Play money added."}
+        </Banner>
+      </div>
     );
   }
 
   return (
     <div className="stack">
-      {showBalance && balance != null && (
-        <div className="between small">
-          <span className="muted">Your play money</span>
-          <b>{money(balance)}</b>
-        </div>
-      )}
+      {balanceRow}
       <button className="subtle block" onClick={drip} disabled={busy || wallet.busy}>
         {busy
           ? "Adding…"

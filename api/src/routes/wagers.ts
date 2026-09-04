@@ -667,12 +667,22 @@ export async function syncFromChain(wagerId: string) {
   return state;
 }
 
+/// Asks the chain what really happened, after the client sent a transaction.
+///
+/// A failure here is not a failed action: the transaction has already landed,
+/// and the record catches up on the next read either way. Reporting it as an
+/// error told someone their bet had broken when the escrow already held their
+/// money, so an unreadable chain returns what we have instead.
 router.post(
   "/:id/sync",
   asyncHandler(async (req: AuthedRequest, res) => {
-    await loadWager(req.params.id, req.userId!);
-    const state = await syncFromChain(req.params.id);
-    res.json({ ok: true, onchain: state });
+    const wager = await loadWager(req.params.id, req.userId!);
+    try {
+      res.json({ ok: true, onchain: await syncFromChain(req.params.id) });
+    } catch (error) {
+      console.warn(`Could not reconcile wager ${wager.onchainId} from chain`, error);
+      res.json({ ok: true, onchain: null, stale: true });
+    }
   })
 );
 

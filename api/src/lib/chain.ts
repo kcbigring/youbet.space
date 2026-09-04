@@ -39,6 +39,40 @@ export function artifact(name: string): { abi: ethers.InterfaceAbi; bytecode: st
   return { abi, bytecode };
 }
 
+const RATE_LIMITED = /rate limit|too many requests|429/i;
+
+const isRateLimited = (entry: ethers.JsonRpcResult | ethers.JsonRpcError) =>
+  "error" in entry && (entry.error.code === -32016 || RATE_LIMITED.test(entry.error.message ?? ""));
+
+/// A provider that waits out a rate limit instead of failing the request.
+///
+/// Public Base endpoints answer -32016 under very little load, and ethers turns
+/// that into "missing revert data" — an error that reads like a broken contract
+/// call and sends you looking in the wrong place entirely. A read that is only
+/// throttled should cost latency, not correctness, so retry with backoff.
+class RetryingProvider extends ethers.JsonRpcProvider {
+  // ethers types the result as successes only, though an error entry is
+  // exactly what a throttled node returns in it.
+  async _send(
+    payload: ethers.JsonRpcPayload | Array<ethers.JsonRpcPayload>
+  ): Promise<Array<ethers.JsonRpcResult>> {
+    let wait = 200;
+    for (let attempt = 0; ; attempt++) {
+      const last = attempt >= 4;
+      try {
+        const results = await super._send(payload);
+        const entries = results as Array<ethers.JsonRpcResult | ethers.JsonRpcError>;
+        if (last || !entries.some(isRateLimited)) return results;
+      } catch (error) {
+        if (last || !RATE_LIMITED.test(String((error as Error)?.message))) throw error;
+      }
+      // Jittered, so several concurrent reads do not retry in lockstep.
+      await new Promise((resolve) => setTimeout(resolve, wait + Math.random() * wait));
+      wait *= 2;
+    }
+  }
+}
+
 let provider: ethers.JsonRpcProvider | null = null;
 
 export function getProvider(): ethers.JsonRpcProvider {
@@ -46,7 +80,7 @@ export function getProvider(): ethers.JsonRpcProvider {
     // cacheTimeout: -1 disables ethers' short-lived RPC cache. The relayer sends
     // transactions back to back when sponsoring gas, and a cached nonce makes the
     // second one fail with NONCE_EXPIRED.
-    provider = new ethers.JsonRpcProvider(env.rpcUrl, env.chainId, { cacheTimeout: -1 });
+    provider = new RetryingProvider(env.rpcUrl, env.chainId, { cacheTimeout: -1 });
   }
   return provider;
 }
