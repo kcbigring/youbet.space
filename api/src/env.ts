@@ -33,7 +33,13 @@ export const env = {
 
   // Chain — Base is the primary network.
   chainId: num(process.env.CHAIN_ID, 84532),
-  rpcUrl: process.env.BASE_RPC || process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",
+  // Falling back to a Sepolia endpoint on a mainnet deployment reads every
+  // contract as absent, so the default follows CHAIN_ID. Both public endpoints
+  // throttle hard: set BASE_RPC to a dedicated node for anything real.
+  rpcUrl:
+    process.env.BASE_RPC ||
+    process.env.BASE_SEPOLIA_RPC ||
+    (Number(process.env.CHAIN_ID) === 8453 ? "https://mainnet.base.org" : "https://sepolia.base.org"),
   deployerPrivateKey: process.env.DEPLOYER_PRIVATE_KEY,
   /// ERC-20 the stakes are denominated in: test dollars on testnet, USDC on
   /// mainnet. Six decimals either way.

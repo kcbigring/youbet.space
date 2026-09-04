@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   useAccount,
   useConnect,
@@ -9,6 +9,11 @@ import {
 import { createClient, custom, type EIP1193Provider } from "viem";
 import { waitForCallsStatus, type WaitForCallsStatusReturnType } from "viem/actions";
 import { callCapabilities, activeChain } from "./wagmi";
+import { api, getToken } from "./api";
+
+/// Addresses already reported this session. Module-level, so remounting a page
+/// does not repost, and so no component owns the responsibility.
+const registered = new Set<string>();
 
 export interface Call {
   to: `0x${string}`;
@@ -29,6 +34,21 @@ export function useWallet() {
   const { disconnect } = useDisconnect();
   const { sendCallsAsync, data: callsResult, isPending: sending, error: sendError } = useSendCalls();
   const { isLoading: confirming } = useWaitForCallsStatus({ id: callsResult?.id });
+
+  // Tell the API which smart account belongs to this person, wherever they
+  // happen to be when the wallet connects.
+  //
+  // This used to live in <ConnectWallet>, which only renders while there is no
+  // wallet — so connecting unmounted the very component responsible for
+  // reporting the address, and whether the request went out at all came down to
+  // React's scheduling. An address we never recorded is an address we cannot
+  // map back to a person: that account funded a wager and the app kept showing
+  // them as merely invited, because reconciliation had nothing to match on.
+  useEffect(() => {
+    if (!isConnected || !address || registered.has(address) || !getToken()) return;
+    registered.add(address);
+    api.post("/auth/wallet", { address }).catch(() => registered.delete(address));
+  }, [isConnected, address]);
 
   /// Creates the passkey on first use and returns the smart-account address.
   const signIn = useCallback(() => {

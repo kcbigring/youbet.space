@@ -1,26 +1,23 @@
-import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { useEffect, useRef } from "react";
 import { useWallet } from "../lib/useWallet";
 import { Banner } from "./Layout";
 
-/// Creates (or reconnects) the user's passkey-owned smart account and records
-/// the address with the API. The passkey lives in the device keychain — there is
-/// no seed phrase, and the platform holds nothing it could spend from.
+/// Creates (or reconnects) the user's passkey-owned smart account. The passkey
+/// lives in the device keychain — there is no seed phrase, and the platform
+/// holds nothing it could spend from.
+///
+/// Registering the address with the API is deliberately not this component's
+/// job: it renders only while there is no wallet, so it disappears at the exact
+/// moment there is something to report. `useWallet` does it instead.
 export function ConnectWallet({ onReady }: { onReady?: (address: string) => void }) {
   const { address, isConnected, signIn, connecting, error } = useWallet();
-  const [linked, setLinked] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const announced = useRef(false);
 
   useEffect(() => {
-    if (!isConnected || !address || linked) return;
-    api
-      .post("/auth/wallet", { address })
-      .then(() => {
-        setLinked(true);
-        onReady?.(address);
-      })
-      .catch((err) => setLinkError(err.message));
-  }, [isConnected, address, linked, onReady]);
+    if (!isConnected || !address || announced.current) return;
+    announced.current = true;
+    onReady?.(address);
+  }, [isConnected, address, onReady]);
 
   if (isConnected && address) {
     return (
@@ -32,7 +29,6 @@ export function ConnectWallet({ onReady }: { onReady?: (address: string) => void
         <p className="small muted" style={{ marginBottom: 0, marginTop: 8 }}>
           Secured by a passkey on this device. No seed phrase, and we cannot spend from it.
         </p>
-        <Banner>{linkError}</Banner>
       </div>
     );
   }
