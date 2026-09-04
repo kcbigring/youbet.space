@@ -393,6 +393,11 @@ router.post(
 
 const sideSchema = z.object({ side: z.number().int().min(0).max(1) });
 
+export const wagerInviteSchema = z.object({
+  // Optional: a link with no number attached is what the share sheet sends.
+  phone: z.string().min(7).optional(),
+});
+
 /// Records the side a user intends to take and returns the exact call for their
 /// wallet to send. Nothing is committed until the chain says so.
 router.post(
@@ -491,13 +496,36 @@ router.post(
   })
 );
 
+/// Mints a share link for a wager. Mirrors the group endpoint exactly, because
+/// one component renders both: a bare `{}` means an open link for the share
+/// sheet, and a phone additionally reserves that person a seat.
 router.post(
   "/:id/invites",
   asyncHandler(async (req: AuthedRequest, res) => {
-    const { phones } = parseBody(z.object({ phones: z.array(z.string().min(7)).min(1).max(19) }), req);
+    const body = parseBody(wagerInviteSchema, req);
     const wager = await loadWager(req.params.id, req.userId!);
-    const invited = await inviteToWager(wager.id, req.userId!, phones, wager.proposition, wager.stakeCents);
-    res.status(201).json({ ok: true, invited });
+
+    const phone = body.phone ? normalizePhone(body.phone) : null;
+    if (body.phone && !phone) throw badRequest("Enter a valid phone number, including country code");
+
+    if (phone) {
+      const existing = await prisma.user.findUnique({ where: { phone } });
+      const already = existing
+        ? await prisma.wagerParticipant.findUnique({
+            where: { wagerId_userId: { wagerId: wager.id, userId: existing.id } },
+          })
+        : null;
+      if (already?.state === "JOINED") return res.json({ ok: true, alreadyMember: true });
+    }
+
+    const [invited] = await inviteToWager(
+      wager.id,
+      req.userId!,
+      phone ? [phone] : [],
+      wager.proposition,
+      wager.stakeCents
+    );
+    res.status(201).json({ ok: true, ...invited });
   })
 );
 

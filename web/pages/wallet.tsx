@@ -88,7 +88,7 @@ export default function Wallet() {
             <div style={{ marginTop: 14 }}>
               <FoundingSlots />
               <div style={{ marginTop: 12 }}>
-                <TestMoney onFunded={() => router.reload()} />
+                <TestMoney showBalance={false} onFunded={() => router.reload()} />
               </div>
             </div>
 

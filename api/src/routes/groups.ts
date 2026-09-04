@@ -107,7 +107,7 @@ router.patch(
   })
 );
 
-const inviteSchema = z.object({
+export const inviteSchema = z.object({
   // Optional: a link with no number attached works for the share sheet.
   phone: z.string().min(7).optional(),
   name: z.string().trim().max(60).optional(),

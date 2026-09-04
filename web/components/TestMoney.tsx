@@ -9,7 +9,15 @@ import { Banner } from "./Layout";
 /// letting them bet on whatever they normally argue about; this is that, and it
 /// disappears on mainnet where the token is real USDC and this contract is not
 /// deployed.
-export function TestMoney({ onFunded }: { onFunded?: () => void }) {
+export function TestMoney({
+  onFunded,
+  /// The wallet page prints the balance in 30px type directly above this, so it
+  /// is the one place that does not want it repeated.
+  showBalance = true,
+}: {
+  onFunded?: () => void;
+  showBalance?: boolean;
+}) {
   const wallet = useWallet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,18 +25,36 @@ export function TestMoney({ onFunded }: { onFunded?: () => void }) {
 
   // Says what this account would get before it commits, including its place in
   // the founding hundred.
-  const { data: preview } = useReadContract({
+  const enabled = Boolean(hasStakeToken && wallet.address);
+  const { data: preview, refetch: refetchPreview } = useReadContract({
     address: hasStakeToken ? stakeTokenAddress : undefined,
     abi: playDollarAbi,
     functionName: "previewDrip",
     args: wallet.address ? [wallet.address] : undefined,
-    query: { enabled: Boolean(hasStakeToken && wallet.address) },
+    query: { enabled },
+  });
+
+  // What they hold right now. Read from the token rather than our API: this
+  // sits next to the button that changes it, so it has to be the same source
+  // the drip writes to or the two disagree for as long as the API lags.
+  const { data: held, refetch: refetchBalance } = useReadContract({
+    address: hasStakeToken ? stakeTokenAddress : undefined,
+    abi: playDollarAbi,
+    functionName: "balanceOf",
+    args: wallet.address ? [wallet.address] : undefined,
+    query: { enabled },
   });
 
   const [amount, position, bonus] = (preview as readonly bigint[] | undefined) ?? [];
   const dollars = (v?: bigint) => (v == null ? null : Number(v) / 1e6);
   const total = dollars(amount);
   const bonusUsd = dollars(bonus);
+  const balance = dollars(held as bigint | undefined);
+
+  /// Whole dollars unless there are cents to show — play money lands on round
+  /// numbers, and "$10,500.00" is harder to read at a glance than "$10,500".
+  const money = (v: number) =>
+    `$${v.toLocaleString(undefined, { maximumFractionDigits: v % 1 === 0 ? 0 : 2 })}`;
 
   if (!hasStakeToken || !wallet.isConnected) return null;
 
@@ -43,6 +69,7 @@ export function TestMoney({ onFunded }: { onFunded?: () => void }) {
         },
       ]);
       setDone(true);
+      await Promise.all([refetchBalance(), refetchPreview()]);
       onFunded?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -53,17 +80,28 @@ export function TestMoney({ onFunded }: { onFunded?: () => void }) {
   }
 
   if (done) {
+    const added = bonusUsd && total ? `${money(total)} added — you're number ${position} to join.` : "Play money added.";
     return (
       <Banner kind="info">
-        {bonusUsd ? `$${total?.toLocaleString()} added — you're number ${position} to join.` : "Play money added."}
+        {showBalance && balance != null ? `${added} You have ${money(balance)}.` : added}
       </Banner>
     );
   }
 
   return (
     <div className="stack">
+      {showBalance && balance != null && (
+        <div className="between small">
+          <span className="muted">Your play money</span>
+          <b>{money(balance)}</b>
+        </div>
+      )}
       <button className="subtle block" onClick={drip} disabled={busy || wallet.busy}>
-        {busy ? "Adding…" : total ? `Get $${total.toLocaleString()} to play with` : "Get play money"}
+        {busy
+          ? "Adding…"
+          : total
+            ? `Get ${money(total)} ${balance ? "more " : ""}to play with`
+            : "Get play money"}
       </button>
       {bonusUsd ? (
         <p className="small muted" style={{ margin: 0 }}>
