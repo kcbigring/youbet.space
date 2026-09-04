@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { hasStakeToken, stakeTokenAddress, playDollarAbi } from "../lib/contracts";
+import { activeChain } from "../lib/wagmi";
 
 const usd = (v?: bigint) => (v == null ? null : Number(v) / 1e6);
 const money = (n: number) => "$" + n.toLocaleString();
@@ -11,6 +12,7 @@ export function FoundingSlots({ compact = false }: { compact?: boolean }) {
   const { data } = useReadContract({
     address: hasStakeToken ? stakeTokenAddress : undefined,
     abi: playDollarAbi,
+    chainId: activeChain.id,
     functionName: "claimed",
     query: { enabled: hasStakeToken, refetchInterval: 30_000 },
   });
@@ -18,6 +20,7 @@ export function FoundingSlots({ compact = false }: { compact?: boolean }) {
   const { data: founder } = useReadContract({
     address: hasStakeToken ? stakeTokenAddress : undefined,
     abi: playDollarAbi,
+    chainId: activeChain.id,
     functionName: "founderBonus",
     query: { enabled: hasStakeToken },
   });
@@ -25,6 +28,7 @@ export function FoundingSlots({ compact = false }: { compact?: boolean }) {
   const { data: early } = useReadContract({
     address: hasStakeToken ? stakeTokenAddress : undefined,
     abi: playDollarAbi,
+    chainId: activeChain.id,
     functionName: "earlyBonus",
     query: { enabled: hasStakeToken },
   });

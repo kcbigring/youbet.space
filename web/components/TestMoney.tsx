@@ -3,6 +3,7 @@ import { encodeFunctionData } from "viem";
 import { useReadContract } from "wagmi";
 import { useWallet } from "../lib/useWallet";
 import { hasStakeToken, stakeTokenAddress, playDollarAbi } from "../lib/contracts";
+import { activeChain } from "../lib/wagmi";
 import { Banner } from "./Layout";
 
 /// Test money for the alpha. The plan calls for handing everyone play funds and
@@ -29,6 +30,7 @@ export function TestMoney({
   const { data: preview, refetch: refetchPreview } = useReadContract({
     address: hasStakeToken ? stakeTokenAddress : undefined,
     abi: playDollarAbi,
+    chainId: activeChain.id,
     functionName: "previewDrip",
     args: wallet.address ? [wallet.address] : undefined,
     query: { enabled },
@@ -40,6 +42,7 @@ export function TestMoney({
   const { data: held, refetch: refetchBalance } = useReadContract({
     address: hasStakeToken ? stakeTokenAddress : undefined,
     abi: playDollarAbi,
+    chainId: activeChain.id,
     functionName: "balanceOf",
     args: wallet.address ? [wallet.address] : undefined,
     query: { enabled },

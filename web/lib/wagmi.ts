@@ -13,7 +13,12 @@ export const activeChain =
   Number(process.env.NEXT_PUBLIC_CHAIN_ID || baseSepolia.id) === base.id ? base : baseSepolia;
 
 export const config: Config = createConfig({
-  chains: [baseSepolia, base],
+  // The active chain goes first, and that ordering is load-bearing: a read
+  // that does not name a chain uses the config's current one, which before any
+  // wallet connects is simply the head of this list. With Sepolia first, every
+  // contract read on mainnet went to sepolia.base.org, found no contract, and
+  // returned nothing — balances and founding slots silently rendered blank.
+  chains: activeChain.id === base.id ? [base, baseSepolia] : [baseSepolia, base],
   // We ship one wallet; scanning for injected providers only adds ways to fail.
   multiInjectedProviderDiscovery: false,
   connectors: [
