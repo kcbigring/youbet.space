@@ -72,6 +72,10 @@ since a wager needs someone on the other side.
 
 ## What it covers
 
+The happy path, and then the ways it goes wrong — which is where the money is.
+
+**A bet between two people**
+
 1. Each wallet is recorded against the person who connected it — asserted
    against the API, not the screen, because an address we never stored is one we
    cannot reconcile to anybody.
@@ -83,6 +87,32 @@ since a wager needs someone on the other side.
 6. The loser concedes; the pot pays out at $20.80 and $1.00 — stakes, the 1%
    fee, and both bonds returned — and both players collect.
 
+**When it goes wrong**
+
+7. Both players claim they won. Neither reaches the threshold and nothing
+   settles, which is the correct answer to two people lying at each other.
+8. The window shuts and `expire` returns every stake. Both bonds come back,
+   because both of them did turn up.
+9. One player answers and the other never does. The silent one's bond goes to
+   the one who turned up — $12 against $10. This is the only thing making
+   anyone answer at all, and it had never once run.
+10. Three people, where the threshold stops meaning "both of you". Two of three
+    agree and it settles without waiting on the third: $16.35 each, being a $30
+    pot less the fee, split between the winners, plus the absent player's
+    forfeited bond.
+
 Assertions are against the chain wherever the chain is the authority. The app
 reloads itself when money lands, which takes any confirmation banner with it;
 the token balance does not lie and does not disappear.
+
+## Time
+
+Deadlines are the mechanism — when voting opens, when it shuts, when a bond is
+forfeit — and waiting six hours to watch one pass is not a test anyone runs. The
+harness moves the chain with `evm_increaseTime` and the browser with
+Playwright's `clock.setFixedTime`, which leaves real timers running so
+transaction waits still work.
+
+New wagers take their deadlines from the *chain's* clock rather than the wall
+clock, because earlier scenarios have already pushed it forward and a wager
+whose funding deadline is already past cannot be joined at all.

@@ -42,6 +42,9 @@ export default function Create() {
   /// How long everyone has to vote once the outcome is known. The contract
   /// refuses more than seven days.
   const [voteWindow, setVoteWindow] = useState("72");
+  /// How many people can take a side. The contract locks the wager the moment
+  /// it fills, so this is decided before it goes on-chain and cannot change.
+  const [seats, setSeats] = useState("2");
   const wallet = useWallet();
 
   useEffect(() => {
@@ -97,6 +100,7 @@ export default function Create() {
         creatorSide: side,
         eventDeadline: new Date(deadline).toISOString(),
         resolutionWindowHours: Number(voteWindow),
+        maxParticipants: Number(seats),
         resolutionMethod: parsed?.resolution ?? "ATTESTATION",
         oracleSource: parsed?.oracleSource ?? undefined,
         category: parsed?.category ?? undefined,
@@ -191,6 +195,21 @@ export default function Create() {
           </div>
 
           <div className="field">
+            <label htmlFor="seats">How many people</label>
+            <select id="seats" value={seats} onChange={(e) => setSeats(e.target.value)}>
+              <option value="2">Just the two of us</option>
+              {[3, 4, 5, 6, 8, 10].map((n) => (
+                <option key={n} value={n}>
+                  {n} people
+                </option>
+              ))}
+            </select>
+            <p className="small muted" style={{ margin: "6px 0 0" }}>
+              It locks as soon as that many have funded, and nobody can join after.
+            </p>
+          </div>
+
+          <div className="field">
             <label htmlFor="stake">Stake per person (USD)</label>
             <input
               id="stake"
@@ -251,6 +270,10 @@ export default function Create() {
 
           <div className="card" style={{ marginTop: 18 }}>
             <div className="between small">
+              <span className="muted">Pot if it fills</span>
+              <span>{usd(Math.round(parseFloat(stake || "0") * 100) * Number(seats))}</span>
+            </div>
+            <div className="between small" style={{ marginTop: 6 }}>
               <span className="muted">Your stake</span>
               <span>{usd(Math.round(parseFloat(stake || "0") * 100))}</span>
             </div>

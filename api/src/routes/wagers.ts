@@ -196,6 +196,7 @@ router.post(
         resolutionMethod: body.resolutionMethod,
         oracleSource: body.oracleSource,
         thresholdBps,
+        maxParticipants: body.maxParticipants,
         fundingDeadline,
         eventDeadline,
         resolutionDeadline,
@@ -433,7 +434,10 @@ router.get(
         fundingDeadline: Math.floor(wager.fundingDeadline.getTime() / 1000),
         eventDeadline: Math.floor(wager.eventDeadline.getTime() / 1000),
         resolutionDeadline: Math.floor(wager.resolutionDeadline.getTime() / 1000),
-        maxParticipants: wager.participants.length > 2 ? wager.participants.length : 2,
+        // What the creator chose, not what the draft happens to hold: a draft
+        // has only its creator in it, so deriving the cap here made every wager
+        // a two-hander and a third person "wager full".
+        maxParticipants: wager.maxParticipants,
         resolutionMethod: wager.resolutionMethod === "ORACLE" ? 1 : 0,
       },
     });

@@ -166,6 +166,11 @@ model Wager {
   resolutionMethod ResolutionMethod @default(ATTESTATION)
   thresholdBps     Int              @default(5000)
   oracleSource     String?
+  /// How many people can take a side. The contract locks the wager the moment
+  /// it fills and refuses anyone after, so this has to be decided before it
+  /// goes on-chain — it was previously derived as "always two", which made a
+  /// three-way bet impossible to create at all.
+  maxParticipants  Int              @default(2)
 
   fundingDeadline    DateTime
   eventDeadline      DateTime

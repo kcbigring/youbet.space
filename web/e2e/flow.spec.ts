@@ -21,6 +21,7 @@ const BOOK = process.env.E2E_WAGER_BOOK as `0x${string}`;
 const TOKEN = process.env.E2E_STAKE_TOKEN as `0x${string}`;
 const ALICE = process.env.E2E_ALICE as `0x${string}`;
 const BOB = process.env.E2E_BOB as `0x${string}`;
+const CAROL = process.env.E2E_CAROL as `0x${string}`;
 
 const chain = createPublicClient({ chain: foundry, transport: http(process.env.E2E_RPC_URL) });
 
@@ -85,22 +86,130 @@ async function topUp(page: Page, who: `0x${string}`) {
   await expect.poll(() => balance(who), { timeout: 120_000 }).toBeGreaterThan(before);
 }
 
+/// Moves the chain's clock. Deadlines are the whole mechanism here — when
+/// voting opens, when it shuts, when a bond is forfeit — and waiting hours to
+/// watch one pass is not a test anyone will run.
+async function chainJump(seconds: number) {
+  for (const [method, params] of [
+    ["evm_increaseTime", [seconds]],
+    ["evm_mine", []],
+  ] as const) {
+    await fetch(process.env.E2E_RPC_URL!, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+  }
+}
+
+const chainNow = async () => Number((await chain.getBlock()).timestamp) * 1000;
+
+/// The browser's clock, moved to match. `setFixedTime` leaves real timers
+/// running, so polling and transaction waits still work — only `Date.now()`
+/// moves, which is all the app reads a deadline against.
+async function browserJump(page: Page, to: number) {
+  await page.clock.setFixedTime(new Date(to));
+  await page.reload({ waitUntil: "networkidle" });
+}
+
+/// A `datetime-local` value, in the browser's timezone.
+const localInput = (ms: number) =>
+  new Date(ms - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+
+/// Creates a wager whose outcome is due shortly, and whose voting window is the
+/// shortest the creator can pick.
+///
+/// The deadline is set from the chain's clock, not the wall clock: earlier
+/// tests move the chain forward, and a wager whose funding deadline is already
+/// past on-chain cannot be joined at all.
+async function createWager(page: Page, text: string, { dueInSeconds = 600, seats = 2 } = {}) {
+  const due = (await chainNow()) + dueInSeconds * 1000;
+
+  await page.goto("/create", { waitUntil: "networkidle" });
+  await page.fill("textarea", text);
+  await page.click('button:has-text("Continue")');
+  await page.fill("#deadline", localInput(due));
+  await page.selectOption("#voteWindow", "6");
+  await page.selectOption("#seats", String(seats));
+  await page.click('button:has-text("Send challenge")');
+  await page.waitForURL(/\/w\//, { timeout: 120_000 });
+
+  return { url: new URL(page.url()).pathname, id: Number(await read<bigint>("wagerCount")), due };
+}
+
+/// Puts money on a side and waits for the escrow to say so.
+async function fund(page: Page, id: number, expected: number) {
+  const button = page.locator("button", { hasText: /^Back:/ });
+  await expect(button.first()).toBeVisible({ timeout: 30_000 });
+  await (expected === 1 ? button.first() : button.last()).click();
+  await expect
+    .poll(async () => (await read<string[]>("getParticipants", [id])).length, { timeout: 120_000 })
+    .toBe(expected);
+}
+
+/// Hands the invite link to the other player and has them take the other side.
+async function bringIn(from: Page, to: Page, id: number) {
+  const link = await from.locator(".share-link input").first().inputValue();
+  expect(link).toContain("/j/");
+  await to.goto(new URL(link).pathname, { waitUntil: "networkidle" });
+  await to.click('button:has-text("Take the bet")');
+  await to.waitForURL(/\/w\//, { timeout: 60_000 });
+  await fund(to, id, 2);
+}
+
+/// Two funded players on opposite sides of a fresh wager, with the outcome
+/// already due — the state every settlement path starts from.
+async function aBetReadyToSettle(alice: Page, bob: Page, text: string) {
+  const wager = await createWager(alice, text);
+  await fund(alice, wager.id, 1);
+  await bringIn(alice, bob, wager.id);
+
+  // Past the outcome, so votes are accepted, but not past the voting window.
+  await chainJump(700);
+  const now = await chainNow();
+  await browserJump(alice, now);
+  await browserJump(bob, now);
+  return { ...wager, now };
+}
+
+/// Makes sure someone has enough to bet with, without insisting they take more.
+///
+/// The drip only pays once a day, so calling `topUp` again in a later scenario
+/// sends a transaction that reverts and a balance that never moves. What each
+/// scenario actually needs is a funded player, not a fresh top-up.
+async function ensureFunds(page: Page, who: `0x${string}`, minimum = 100) {
+  if (usd(await balance(who)) >= minimum) return;
+  await topUp(page, who);
+}
+
+type Player = Awaited<ReturnType<typeof player>>;
+
+let alice!: Player;
+let bob!: Player;
+let signedIn = false;
+
+/// The same two people throughout. A wallet belongs to exactly one account —
+/// the app refuses to move it, correctly — so a scenario cannot sign in as
+/// somebody new and expect to hold the same wallet.
+async function players(browser: Browser) {
+  if (!signedIn) {
+    alice = await player(browser, "Alice", ALICE);
+    bob = await player(browser, "Bob", BOB);
+    signedIn = true;
+  }
+  await ensureFunds(alice.page, ALICE);
+  await ensureFunds(bob.page, BOB);
+  return { alice, bob };
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("a bet between two people", () => {
-  let alice: Awaited<ReturnType<typeof player>>;
-  let bob: Awaited<ReturnType<typeof player>>;
   let wagerUrl: string;
   let wagerId: number;
 
   test.beforeAll(async ({ browser }) => {
-    alice = await player(browser, "Alice", ALICE);
-    bob = await player(browser, "Bob", BOB);
-  });
-
-  test.afterAll(async () => {
-    await alice?.page.context().close();
-    await bob?.page.context().close();
+    await players(browser);
   });
 
   // The address is how on-chain activity maps back to a person. It once was
@@ -116,14 +225,16 @@ test.describe("a bet between two people", () => {
     }
   });
 
+  // Signing in is where an invited friend arrives with nothing, so the top-up
+  // has already run by now. What matters is that it paid the founding bonus
+  // rather than the daily trickle.
   test("play money arrives, with the founding bonus on top", async () => {
-    const before = await balance(ALICE);
-    await topUp(alice.page, ALICE);
-    await topUp(bob.page, BOB);
-
-    // The first hundred accounts get a founding bonus on top of the top-up.
-    expect(usd((await balance(ALICE)) - before)).toBeGreaterThan(1_000);
+    expect(usd(await balance(ALICE))).toBeGreaterThan(1_000);
     expect(usd(await balance(BOB))).toBeGreaterThan(1_000);
+
+    // Two accounts have taken a founding slot, and the board says so.
+    await alice.page.goto("/wallet", { waitUntil: "networkidle" });
+    await expect(alice.page.getByText(/founding spots claimed/i)).toBeVisible();
   });
 
   test("a challenge is created, and the deadline is the one that was said", async () => {
@@ -202,5 +313,152 @@ test.describe("a bet between two people", () => {
     await expect
       .poll(async () => usd((await balance(BOB)) - bobBefore), { timeout: 120_000 })
       .toBeCloseTo(1, 2);
+  });
+});
+
+/// Nobody can be stopped from claiming they won, so the question is what
+/// happens when both do. Nothing settles, the window shuts, and the stakes go
+/// back — with every bond returned, because both of them did turn up.
+test.describe("a bet both players claim to have won", () => {
+  test.beforeAll(async ({ browser }) => {
+    await players(browser);
+  });
+
+  test("neither side reaches the threshold, so nothing pays out", async () => {
+    const bet = await aBetReadyToSettle(alice.page, bob.page, "$10 that I run five miles");
+
+    for (const page of [alice.page, bob.page]) {
+      await page.locator("button", { hasText: /^I won/ }).click();
+      await page.locator("button", { hasText: /Yes, I won/ }).click();
+      await expect(page.getByText(/waiting on the others/i)).toBeVisible({ timeout: 120_000 });
+    }
+
+    // Two people, two contradictory claims, and a threshold of both: deadlock.
+    const [status] = [await read<Record<string, unknown>>("getWager", [bet.id])];
+    expect(Number((status as { status: number }).status), "still locked").toBe(2);
+    expect(await read<bigint>("credits", [ALICE])).toBe(0n);
+  });
+
+  test("the window closes and everyone gets their money back", async () => {
+    const bet = Number(await read<bigint>("wagerCount"));
+
+    // Past the voting window, which the creator set to six hours.
+    await chainJump(6 * 3_600 + 60);
+    await browserJump(alice.page, await chainNow());
+
+    await alice.page.locator("button", { hasText: /Close it out/ }).click();
+
+    await expect
+      .poll(async () => usd(await read<bigint>("credits", [ALICE])), { timeout: 120_000 })
+      .toBeCloseTo(11, 2);
+    // Both voted, so neither forfeits: $10 stake and the $1 bond, each.
+    expect(usd(await read<bigint>("credits", [BOB]))).toBeCloseTo(11, 2);
+
+    const wager = (await read<{ status: number }>("getWager", [bet])) as { status: number };
+    expect(Number(wager.status), "refunded").toBe(4);
+  });
+});
+
+/// The bond is the only thing making anyone answer, and it had never once been
+/// forfeited. One player votes, the other never does, and the silent one's bond
+/// goes to the one who turned up.
+test.describe("a bet one player never answers", () => {
+  test.beforeAll(async ({ browser }) => {
+    await players(browser);
+  });
+
+  test("the silent player's bond goes to the one who turned up", async () => {
+    const before = { alice: await read<bigint>("credits", [ALICE]), bob: await read<bigint>("credits", [BOB]) };
+    const bet = await aBetReadyToSettle(alice.page, bob.page, "$10 that I break ninety");
+
+    await alice.page.locator("button", { hasText: /^I won/ }).click();
+    await alice.page.locator("button", { hasText: /Yes, I won/ }).click();
+    await expect(alice.page.getByText(/waiting on the others/i)).toBeVisible({ timeout: 120_000 });
+
+    // Bob says nothing at all, and the window runs out.
+    await chainJump(6 * 3_600 + 60);
+    await browserJump(alice.page, await chainNow());
+    await alice.page.locator("button", { hasText: /Close it out/ }).click();
+
+    // Stake back for both. Alice also collects her own bond and Bob's, because
+    // she answered and he did not.
+    await expect
+      .poll(async () => usd((await read<bigint>("credits", [ALICE])) - before.alice), { timeout: 120_000 })
+      .toBeCloseTo(12, 2);
+    expect(usd((await read<bigint>("credits", [BOB])) - before.bob)).toBeCloseTo(10, 2);
+
+    void bet;
+  });
+});
+
+/// With more than two people the threshold stops meaning "both of you" and
+/// starts deciding something: a majority settles it, and whoever could not be
+/// bothered to answer pays for the privilege.
+test.describe("a bet among three people", () => {
+  let carol: Player;
+
+  test.beforeAll(async ({ browser }) => {
+    await players(browser);
+    carol = await player(browser, "Carol", CAROL);
+    await ensureFunds(carol.page, CAROL);
+  });
+
+  test("a majority settles it, and the silent player's bond pays for it", async () => {
+    // Deltas, not totals: credits are global and these players are carrying
+    // balances from earlier scenarios they never withdrew.
+    const before = {
+      alice: await read<bigint>("credits", [ALICE]),
+      bob: await read<bigint>("credits", [BOB]),
+      carol: await read<bigint>("credits", [CAROL]),
+    };
+
+    const bet = await createWager(alice.page, "$10 that I make it to the gym", { seats: 3 });
+    await fund(alice.page, bet.id, 1);
+
+    // The same link brings in as many people as there are seats.
+    const link = await alice.page.locator(".share-link input").first().inputValue();
+    for (const [who, seat] of [
+      [bob, 2],
+      [carol, 3],
+    ] as const) {
+      await who.page.goto(new URL(link).pathname, { waitUntil: "networkidle" });
+      await who.page.click('button:has-text("Take the bet")');
+      await who.page.waitForURL(/\/w\//, { timeout: 60_000 });
+      // Bob opposes; Carol backs Alice, which is what makes a majority possible.
+      const side = who === bob ? "last" : "first";
+      const button = who.page.locator("button", { hasText: /^Back:/ });
+      await expect(button.first()).toBeVisible({ timeout: 30_000 });
+      await (side === "first" ? button.first() : button.last()).click();
+      await expect
+        .poll(async () => (await read<string[]>("getParticipants", [bet.id])).length, {
+          timeout: 120_000,
+        })
+        .toBe(seat);
+    }
+
+    await chainJump(700);
+    const now = await chainNow();
+    for (const who of [alice, bob, carol]) await browserJump(who.page, now);
+
+    // Two of three is the threshold, so the second agreement settles it — no
+    // waiting on Bob, who never answers at all.
+    for (const who of [alice, carol]) {
+      await who.page.locator("button", { hasText: /^I won/ }).click();
+      await who.page.locator("button", { hasText: /Yes, I won/ }).click();
+    }
+
+    await expect
+      .poll(async () => usd((await read<bigint>("credits", [ALICE])) - before.alice), {
+        timeout: 120_000,
+      })
+      .toBeGreaterThan(0);
+
+    // $30 pot, 1% fee, split between the two winners: $14.85 each. Both bonds
+    // come back, and Bob's forfeited $1 is divided between the two who spoke.
+    expect(usd((await read<bigint>("credits", [ALICE])) - before.alice)).toBeCloseTo(16.35, 2);
+    expect(usd((await read<bigint>("credits", [CAROL])) - before.carol)).toBeCloseTo(16.35, 2);
+    // Bob backed the losing side and never spoke: he gets nothing, and his
+    // bond is gone.
+    expect(usd((await read<bigint>("credits", [BOB])) - before.bob)).toBe(0);
   });
 });
