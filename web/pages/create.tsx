@@ -39,6 +39,9 @@ export default function Create() {
   const [side, setSide] = useState(0);
   const [groupId, setGroupId] = useState("");
   const [deadline, setDeadline] = useState(toLocalInput(null));
+  /// How long everyone has to vote once the outcome is known. The contract
+  /// refuses more than seven days.
+  const [voteWindow, setVoteWindow] = useState("72");
   const wallet = useWallet();
 
   useEffect(() => {
@@ -60,7 +63,11 @@ export default function Create() {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post<{ parsed: ParsedWager }>("/wagers/parse", { text });
+      const res = await api.post<{ parsed: ParsedWager }>("/wagers/parse", {
+        text,
+        // "6am tomorrow" means 6am here, and the server has no other way to know.
+        tzOffsetMinutes: new Date().getTimezoneOffset(),
+      });
       const p = res.parsed;
       setParsed(p);
       setProposition(p.proposition);
@@ -89,6 +96,7 @@ export default function Create() {
         stakeCents: Math.round(parseFloat(stake) * 100),
         creatorSide: side,
         eventDeadline: new Date(deadline).toISOString(),
+        resolutionWindowHours: Number(voteWindow),
         resolutionMethod: parsed?.resolution ?? "ATTESTATION",
         oracleSource: parsed?.oracleSource ?? undefined,
         category: parsed?.category ?? undefined,
@@ -209,6 +217,22 @@ export default function Create() {
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
             />
+          </div>
+
+          {/* Someone who never votes stalls everyone else's money, so the
+              window has an end and a cost. You set it; the contract enforces
+              it, and after it passes anyone can close the wager out. */}
+          <div className="field">
+            <label htmlFor="voteWindow">Everyone votes within</label>
+            <select id="voteWindow" value={voteWindow} onChange={(e) => setVoteWindow(e.target.value)}>
+              <option value="6">6 hours of the outcome</option>
+              <option value="24">1 day of the outcome</option>
+              <option value="72">3 days of the outcome</option>
+              <option value="168">7 days of the outcome</option>
+            </select>
+            <p className="small muted" style={{ margin: "6px 0 0" }}>
+              Miss it and your {usd(100)} bond goes to whoever did vote.
+            </p>
           </div>
 
           {groups.length > 0 && (

@@ -156,6 +156,21 @@ button.small { padding: 8px 12px; font-size: 13px; }
 .pill.warn { color: var(--warn); border-color: #422006; }
 .pill.done { color: var(--muted); }
 
+/* A vote is either cast or not, and the difference should read at a glance
+   without anyone parsing the words. */
+.pill.vote-voted { color: var(--accent); border-color: var(--accent-dim); }
+.pill.vote-conceded { color: var(--warn); border-color: #422006; }
+.pill.vote-waiting { color: var(--muted); }
+
+.player-row {
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.player-row .pill { flex: none; }
+
 .side-option {
   display: block;
   width: 100%;

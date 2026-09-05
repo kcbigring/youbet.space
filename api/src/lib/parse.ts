@@ -55,21 +55,58 @@ function parseParticipants(text: string): string[] {
     .filter((name) => name.length > 1 && !STOPWORDS.has(name));
 }
 
-function parseDeadline(text: string, now: Date): string | null {
+/// The clock time in a bet, if one is named. "6am", "6:30 pm", "noon".
+export function parseTimeOfDay(text: string): { hour: number; minute: number } | null {
+  const at = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)/i);
+  if (at) {
+    const pm = /^p/i.test(at[3]);
+    let hour = Number(at[1]) % 12;
+    if (pm) hour += 12;
+    return { hour, minute: Number(at[2] ?? 0) };
+  }
+  if (/\bnoon\b/i.test(text)) return { hour: 12, minute: 0 };
+  if (/\bmidnight\b/i.test(text)) return { hour: 0, minute: 0 };
+  return null;
+}
+
+/// Puts `time` on the calendar day `base` falls on, in the bettor's timezone.
+///
+/// `tzOffset` is what `Date.prototype.getTimezoneOffset` returns on their
+/// device: minutes to add to local time to get UTC. Without it the server would
+/// read "6am" as 6am UTC, which is the middle of the night for most people —
+/// the whole point of a deadline is that it lands when they expect.
+function atLocalTime(base: Date, time: { hour: number; minute: number }, tzOffset: number): Date {
+  const local = new Date(base.getTime() - tzOffset * 60_000);
+  local.setUTCHours(time.hour, time.minute, 0, 0);
+  return new Date(local.getTime() + tzOffset * 60_000);
+}
+
+function parseDeadline(text: string, now: Date, tzOffset = 0): string | null {
+  const time = parseTimeOfDay(text);
+  const withTime = (base: Date) => (time ? atLocalTime(base, time, tzOffset) : base).toISOString();
+
   const days = text.match(/\bin\s+(\d+)\s+days?\b/i);
-  if (days) return new Date(now.getTime() + Number(days[1]) * 86_400_000).toISOString();
+  if (days) return withTime(new Date(now.getTime() + Number(days[1]) * 86_400_000));
 
   const weeks = text.match(/\bin\s+(\d+)\s+weeks?\b/i);
-  if (weeks) return new Date(now.getTime() + Number(weeks[1]) * 7 * 86_400_000).toISOString();
+  if (weeks) return withTime(new Date(now.getTime() + Number(weeks[1]) * 7 * 86_400_000));
 
-  if (/\btomorrow\b/i.test(text)) return new Date(now.getTime() + 86_400_000).toISOString();
-  if (/\btonight\b|\btoday\b/i.test(text)) return new Date(now.getTime() + 12 * 3_600_000).toISOString();
-  if (/\bthis weekend\b|\bsunday\b|\bsaturday\b/i.test(text)) {
-    return new Date(now.getTime() + 5 * 86_400_000).toISOString();
+  if (/\btomorrow\b/i.test(text)) return withTime(new Date(now.getTime() + 86_400_000));
+  if (/\btonight\b|\btoday\b/i.test(text)) {
+    return withTime(new Date(now.getTime() + (time ? 0 : 12 * 3_600_000)));
   }
-  if (/\bnext week\b/i.test(text)) return new Date(now.getTime() + 7 * 86_400_000).toISOString();
+  if (/\bthis weekend\b|\bsunday\b|\bsaturday\b/i.test(text)) {
+    return withTime(new Date(now.getTime() + 5 * 86_400_000));
+  }
+  if (/\bnext week\b/i.test(text)) return withTime(new Date(now.getTime() + 7 * 86_400_000));
   if (/\bend of (the )?(month|season|year)\b/i.test(text)) {
-    return new Date(now.getTime() + 30 * 86_400_000).toISOString();
+    return withTime(new Date(now.getTime() + 30 * 86_400_000));
+  }
+
+  // A time with no day — "before 6am" — means the next time it comes round.
+  if (time) {
+    const today = atLocalTime(now, time, tzOffset);
+    return (today > now ? today : new Date(today.getTime() + 86_400_000)).toISOString();
   }
   return null;
 }
@@ -86,7 +123,7 @@ function extractProposition(text: string): string {
 /// "Not: will i use the peloton in the next hour".
 const SIDES: [string, string] = ["Yes", "No"];
 
-export function parseHeuristically(text: string, now = new Date()): ParsedWager {
+export function parseHeuristically(text: string, now = new Date(), tzOffset = 0): ParsedWager {
   const proposition = extractProposition(text);
 
   let resolution: ParsedWager["resolution"] = "ATTESTATION";
@@ -118,7 +155,7 @@ export function parseHeuristically(text: string, now = new Date()): ParsedWager 
     resolution,
     oracleSource,
     category,
-    eventDeadline: parseDeadline(text, now),
+    eventDeadline: parseDeadline(text, now, tzOffset),
     source: "heuristic",
     confidence: 0.4,
   };
@@ -201,17 +238,27 @@ async function parseWithAi(text: string, now: Date): Promise<ParsedWager | null>
 
 /// Natural language is the primary creation interface, so this always returns
 /// usable terms — the model when it is available, deterministic rules otherwise.
-export async function parseWager(text: string, now = new Date()): Promise<ParsedWager> {
+/// `tzOffset` is the bettor's `getTimezoneOffset()`. "6am tomorrow" means 6am
+/// where they are, and the server has no other way to know where that is.
+export async function parseWager(
+  text: string,
+  now = new Date(),
+  tzOffset = 0
+): Promise<ParsedWager> {
+  const fallback = parseHeuristically(text, now, tzOffset);
   const ai = await parseWithAi(text, now);
-  if (!ai) return parseHeuristically(text, now);
+  if (!ai) return fallback;
 
-  // Fill any gap the model left with the deterministic parse.
-  const fallback = parseHeuristically(text, now);
   return {
     ...ai,
     stakeCents: ai.stakeCents ?? fallback.stakeCents,
     participants: ai.participants.length ? ai.participants : fallback.participants,
-    eventDeadline: ai.eventDeadline ?? fallback.eventDeadline,
+    // The deterministic parse wins on time-of-day: the model is given no
+    // timezone, so a stated clock time is the one thing it cannot place.
+    eventDeadline:
+      parseTimeOfDay(text) && fallback.eventDeadline
+        ? fallback.eventDeadline
+        : ai.eventDeadline ?? fallback.eventDeadline,
     category: ai.category ?? fallback.category,
   };
 }

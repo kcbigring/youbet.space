@@ -6,6 +6,7 @@ import type { Wager } from "../../lib/types";
 import { encodeFunctionData } from "viem";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
+import { Players } from "../../components/Players";
 import { ConnectWallet } from "../../components/ConnectWallet";
 import { TestMoney } from "../../components/TestMoney";
 import { FoundingSlots } from "../../components/FoundingSlots";
@@ -98,7 +99,7 @@ export default function WagerDetail() {
   /// Every wager action targets the one book contract, with the wager id as the
   /// first argument. `withdraw` takes none — credits are global, so a single
   /// call collects winnings across every wager.
-  const bookCall = (fn: "attest" | "concede" | "withdraw", args: readonly unknown[] = []) => ({
+  const bookCall = (fn: "attest" | "concede" | "withdraw" | "expire", args: readonly unknown[] = []) => ({
     to: wagerBookAddress,
     data: encodeFunctionData({ abi: wagerBookAbi, functionName: fn, args: args as never }),
   });
@@ -187,6 +188,10 @@ export default function WagerDetail() {
         </div>
       )}
 
+      {wager.status === "LOCKED" || wager.status === "SETTLED" ? (
+        <Players wager={wager} meId={user.id} required={onchain?.attestationsRequired} />
+      ) : null}
+
       <h2>Sides</h2>
       <div className="stack">
         {wager.sideLabels.map((label, index) => {
@@ -251,13 +256,16 @@ export default function WagerDetail() {
 
       {canResolve && (
         <>
-          <h2>{eventOver ? "How did it go?" : "Settle early"}</h2>
-          {onchain && (
-            <p className="small muted" style={{ marginTop: -4 }}>
-              {onchain.attestationsRequired} of {onchain.participants} must agree to settle. So far:{" "}
-              {onchain.attestations[0]} / {onchain.attestations[1]}.
-            </p>
-          )}
+          <h2>{eventOver ? "How did it go?" : "Not settled yet"}</h2>
+          {/* Before the outcome is due, the contract will not accept a vote for
+              either side — so conceding is genuinely the only thing on offer.
+              Saying that outright beats presenting one button and letting it
+              look like the app has decided you lost. */}
+          <p className="small muted" style={{ marginTop: -4 }}>
+            {eventOver
+              ? `Say who won. ${onchain?.attestationsRequired ?? 0} of ${onchain?.participants ?? 0} have to agree before it pays out.`
+              : `Nobody votes until the outcome is due on ${new Date(wager.eventDeadline).toLocaleString()}. Until then the only way to end it early is to give it up.`}
+          </p>
           <div className="stack">
             {eventOver &&
               wager.sideLabels.map((label, index) => (
@@ -277,15 +285,38 @@ export default function WagerDetail() {
               disabled={busy || wallet.busy}
               onClick={() => act(() => onChain(wager.id, [bookCall("concede", [BigInt(wager.onchainId!)])]))}
             >
-              I lost — pay them now
+              I lost &mdash; pay them now
             </button>
           </div>
           <p className="small muted">
-            Resolve by {new Date(wager.resolutionDeadline).toLocaleString()} or your {usd(wager.bondCents)} bond
+            Vote by {new Date(wager.resolutionDeadline).toLocaleString()} or your {usd(wager.bondCents)} bond
             goes to whoever did.
           </p>
         </>
       )}
+
+      {/* The voting window closed without enough agreement. Anyone can call
+          this; stakes come back and the bonds of everyone who did not vote go
+          to those who did. Without it a wager sits locked forever, and the
+          deadline is a threat nothing carries out. */}
+      {wager.status === "LOCKED" &&
+        me?.state === "JOINED" &&
+        new Date(wager.resolutionDeadline) < new Date() && (
+          <>
+            <h2>Voting has closed</h2>
+            <p className="small muted" style={{ marginTop: -4 }}>
+              Not enough people voted in time, so nobody wins. Stakes go back, and the bonds of
+              whoever did not vote are split between those who did.
+            </p>
+            <button
+              className="block"
+              disabled={busy || wallet.busy}
+              onClick={() => act(() => onChain(wager.id, [bookCall("expire", [BigInt(wager.onchainId!)])]))}
+            >
+              Close it out and return the stakes
+            </button>
+          </>
+        )}
 
       {me?.attestedAt && wager.status === "LOCKED" && (
         <div className="banner info" style={{ marginTop: 20 }}>

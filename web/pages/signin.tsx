@@ -27,6 +27,10 @@ function friendlyAuthError(message: string): string {
 
 export default function SignIn() {
   const router = useRouter();
+  /// Set when someone followed an invite but already had an account. The claim
+  /// page cannot let an unverified number into an existing account, so the
+  /// invite rides along with the sign-in that does prove the number.
+  const inviteToken = typeof router.query.invite === "string" ? router.query.invite : undefined;
   const [stage, setStage] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
@@ -89,11 +93,13 @@ export default function SignIn() {
         ? await api.post<{ token: string; landing: { groupId?: string; wagerId?: string } }>("/auth/firebase", {
             idToken: await confirmVerificationCode(confirmation, code),
             displayName: name || undefined,
+            inviteToken,
           })
         : await api.post<{ token: string; landing: { groupId?: string; wagerId?: string } }>("/auth/verify", {
             phone,
             code,
             displayName: name || undefined,
+            inviteToken,
           });
       setToken(res.token);
 

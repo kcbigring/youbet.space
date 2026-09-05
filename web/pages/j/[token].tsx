@@ -25,7 +25,6 @@ export default function JoinByLink() {
 
   const [invite, setInvite] = useState<InvitePreview | null>(null);
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -44,7 +43,7 @@ export default function JoinByLink() {
       const res = await api.post<{
         token: string;
         landing: { groupId: string | null; wagerId: string | null };
-      }>("/auth/claim", { token, displayName: name, phone: phone || undefined });
+      }>("/auth/claim", { token, displayName: name });
 
       setToken(res.token);
       const destination = res.landing.wagerId
@@ -100,23 +99,19 @@ export default function JoinByLink() {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="field">
-              <label htmlFor="phone">Phone (optional)</label>
-              <input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                placeholder="(512) 555-1234"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-
             <Banner>{error}</Banner>
 
             <button className="block" style={{ marginTop: 14 }} onClick={accept} disabled={busy || name.length < 1}>
               {busy ? "One moment…" : invite.wager ? "Take the bet" : "Join the group"}
             </button>
+
+            {/* No phone is asked for here: the link is the credential, and a
+                number nobody has proven is not one. Someone who already has an
+                account proves theirs the usual way, and the invite follows. */}
+            <p className="small muted center" style={{ marginTop: 14 }}>
+              Already have an account?{" "}
+              <a href={`/signin?invite=${encodeURIComponent(String(token))}`}>Sign in instead</a>
+            </p>
 
             <p className="small muted center" style={{ marginTop: 14 }}>
               No password, no seed phrase. We create your wallet for you.

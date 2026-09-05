@@ -22,7 +22,10 @@ const wagerInclude = {
   creator: { select: { id: true, displayName: true, handle: true } },
   group: { select: { id: true, name: true } },
   participants: {
-    include: { user: { select: { id: true, displayName: true, handle: true } } },
+    // The phone comes back so the client can show its last four digits. Two
+    // friends called Mike need telling apart before anyone stakes money on
+    // which of them is voting; the whole number is nobody else's business.
+    include: { user: { select: { id: true, displayName: true, handle: true, phone: true } } },
   },
 } as const;
 
@@ -39,7 +42,26 @@ async function loadWager(id: string, userId: string) {
     });
     if (!membership) throw forbidden("You do not have access to this wager");
   }
-  return wager;
+  return redactPhones(wager);
+}
+
+type WithParticipants = { participants: Array<{ user: { phone: string } }> };
+
+/// Replaces each participant's number with its last four digits.
+///
+/// Everyone in a wager needs to tell the others apart — two friends called Mike
+/// have to be distinguishable before anyone stakes money on which of them
+/// voted — but that is all it takes, and a full number belongs to its owner. An
+/// account claimed by link has a `pending:` placeholder rather than a number,
+/// which yields nothing.
+export function redactPhones<T extends WithParticipants>(wager: T): T {
+  return {
+    ...wager,
+    participants: wager.participants.map((p) => {
+      const digits = (p.user.phone ?? "").replace(/\D/g, "");
+      return { ...p, user: { ...p.user, phone: digits.length >= 4 ? digits.slice(-4) : null } };
+    }),
+  } as T;
 }
 
 // ------------------------------------------------------------------ create
@@ -47,8 +69,16 @@ async function loadWager(id: string, userId: string) {
 router.post(
   "/parse",
   asyncHandler(async (req, res) => {
-    const { text } = parseBody(z.object({ text: z.string().trim().min(3).max(500) }), req);
-    const parsed = await parseWager(text);
+    const { text, tzOffsetMinutes } = parseBody(
+      z.object({
+        text: z.string().trim().min(3).max(500),
+        /// The client's `getTimezoneOffset()`. "6am tomorrow" is 6am where the
+        /// bettor is, and nothing on the server knows where that is.
+        tzOffsetMinutes: z.number().int().min(-840).max(840).optional(),
+      }),
+      req
+    );
+    const parsed = await parseWager(text, new Date(), tzOffsetMinutes ?? 0);
     res.json({ ok: true, parsed });
   })
 );
@@ -65,6 +95,10 @@ const createSchema = z.object({
   thresholdBps: z.number().int().min(1).max(10_000).optional(),
   category: z.string().max(40).optional(),
   eventDeadline: z.coerce.date(),
+  /// Hours after the outcome is known that everyone has to cast a vote. The
+  /// contract caps this at seven days and refuses anything longer, so bound it
+  /// here rather than letting the transaction revert.
+  resolutionWindowHours: z.number().int().min(1).max(168).optional(),
   fundingDeadline: z.coerce.date().optional(),
   ownerSplitBps: z.number().int().min(0).max(10_000).optional(),
   creatorSide: z.number().int().min(0).max(1).default(0),
@@ -133,7 +167,7 @@ router.post(
     const fundingDeadline = body.fundingDeadline ?? eventDeadline;
     if (fundingDeadline > eventDeadline) throw badRequest("Funding must close before the event ends");
 
-    const windowHours = group?.resolutionWindowHours ?? 72;
+    const windowHours = body.resolutionWindowHours ?? group?.resolutionWindowHours ?? 72;
     const resolutionDeadline = new Date(eventDeadline.getTime() + windowHours * HOUR);
 
     const bondCents = body.bondCents ?? group?.defaultBondCents ?? 100;
@@ -212,7 +246,7 @@ router.post(
 router.get(
   "/",
   asyncHandler(async (req: AuthedRequest, res) => {
-    const wagers = await prisma.wager.findMany({
+    const raw = await prisma.wager.findMany({
       where: {
         OR: [
           { participants: { some: { userId: req.userId } } },
@@ -224,6 +258,7 @@ router.get(
       take: 100,
     });
 
+    const wagers = raw.map(redactPhones);
     const mine = (w: (typeof wagers)[number]) => w.participants.find((p) => p.userId === req.userId);
 
     // The home screen groups by what the user has to do next (execution plan §17).

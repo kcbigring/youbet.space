@@ -55,3 +55,41 @@ describe("natural-language wager parsing", () => {
     expect(parseHeuristically("that the Jets miss the playoffs", now).stakeCents).toBeNull();
   });
 });
+
+// A bet says when it ends, and the parser used to hear only the day: "before
+// 6am tomorrow" became this time tomorrow, so a wager whose outcome was known
+// at breakfast could not be voted on until the evening.
+describe("clock times in a bet", () => {
+  // 2026-09-03 22:48 Mountain (UTC-6), which is when this was found.
+  const now = new Date("2026-09-04T04:48:00.000Z");
+  const MOUNTAIN = 360;
+
+  const deadline = (text: string) =>
+    parseHeuristically(text, now, MOUNTAIN).eventDeadline;
+
+  it("puts 6am tomorrow at 6am, not at whatever time it is now", () => {
+    // 06:00 Mountain on the 4th is 12:00 UTC.
+    expect(deadline("i'll bet kc it get up before 6am tomorrow")).toBe("2026-09-04T12:00:00.000Z");
+  });
+
+  it("reads the time in the bettor's timezone, not the server's", () => {
+    // Same words, same instant, different bettor: in UTC it is already the 4th,
+    // so their "tomorrow" is the 5th. Six hours of difference moves the day.
+    const utc = parseHeuristically("before 6am tomorrow", now, 0).eventDeadline;
+    expect(utc).toBe("2026-09-05T06:00:00.000Z");
+  });
+
+  it("handles minutes and the evening", () => {
+    expect(deadline("done by 9:30 pm tomorrow")).toBe("2026-09-05T03:30:00.000Z");
+    expect(deadline("by noon tomorrow")).toBe("2026-09-04T18:00:00.000Z");
+  });
+
+  it("takes the next occurrence when no day is named", () => {
+    // It is 22:48 local, so "6am" is tomorrow morning.
+    expect(deadline("beat me to the gym before 6am")).toBe("2026-09-04T12:00:00.000Z");
+  });
+
+  it("still handles a bare day with no time", () => {
+    expect(deadline("i'll bet you it rains tomorrow")).toBe("2026-09-05T04:48:00.000Z");
+  });
+});

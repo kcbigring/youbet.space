@@ -39,6 +39,9 @@ const verifySchema = z.object({
   code: z.string().regex(/^\d{6}$/, "Code must be 6 digits"),
   displayName: z.string().trim().min(1).max(60).optional(),
   walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  /// Set when someone followed an invite but already had an account: proving
+  /// the phone is what lets them into it, and the invite still has to land.
+  inviteToken: z.string().min(10).optional(),
 });
 
 router.post(
@@ -93,7 +96,19 @@ router.post(
 
     // Honour whatever the invite was attached to, so an SMS invite lands the
     // user directly in the group or wager that brought them here.
-    const { invite } = result;
+    let { invite } = result;
+
+    // A link invite followed by someone who already had an account: the claim
+    // page turns them away rather than letting an unverified number into it, so
+    // the invite rides along with the sign-in that does prove the number.
+    if (body.inviteToken) {
+      const link = await consumeInviteLink(body.inviteToken);
+      if (link.ok) {
+        invite = { ...invite, groupId: link.invite.groupId, wagerId: link.invite.wagerId };
+        await prisma.invite.update({ where: { id: link.invite.id }, data: { usedAt: new Date() } });
+      }
+    }
+
     if (invite.groupId) {
       await prisma.groupMember.upsert({
         where: { groupId_userId: { groupId: invite.groupId, userId: user.id } },
@@ -235,20 +250,26 @@ router.post(
     const phone = body.phone ? normalizePhone(body.phone) : null;
     if (body.phone && !phone) throw badRequest("Enter a valid phone number, including country code");
 
-    // Match on phone when we have one so a returning user keeps their history.
-    const existing = phone ? await prisma.user.findUnique({ where: { phone } }) : null;
-    const user = existing
-      ? await prisma.user.update({
-          where: { id: existing.id },
-          data: { verified: true, displayName: existing.displayName ?? body.displayName },
-        })
-      : await prisma.user.create({
-          data: {
-            phone: phone ?? `pending:${invite.linkToken}`,
-            displayName: body.displayName,
-            verified: true,
-          },
-        });
+    // An invite link proves someone was handed it. It proves nothing about a
+    // phone number, so it must never be enough to enter an account that already
+    // exists: this used to match on the typed number and hand back a session
+    // for that user, which meant anyone holding a forwarded link could sign in
+    // as whoever they claimed to be. A returning user signs in properly and
+    // carries the invite through that.
+    if (phone) {
+      const existing = await prisma.user.findUnique({ where: { phone } });
+      if (existing) {
+        throw conflict("That number already has an account. Sign in and the invite will follow you.");
+      }
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        phone: phone ?? `pending:${invite.linkToken}`,
+        displayName: body.displayName,
+        verified: true,
+      },
+    });
 
     await applyInvite(user.id, invite);
     await prisma.invite.update({ where: { id: invite.id }, data: { usedAt: new Date() } });
