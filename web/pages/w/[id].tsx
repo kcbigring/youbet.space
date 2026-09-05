@@ -189,7 +189,12 @@ export default function WagerDetail() {
       )}
 
       {wager.status === "LOCKED" || wager.status === "SETTLED" ? (
-        <Players wager={wager} meId={user.id} required={onchain?.attestationsRequired} />
+        <Players
+          wager={wager}
+          meId={user.id}
+          required={onchain?.attestationsRequired}
+          votingOpen={eventOver}
+        />
       ) : null}
 
       <h2>Sides</h2>

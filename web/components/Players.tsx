@@ -1,4 +1,5 @@
 import { Avatar } from "./Layout";
+import { timeUntil } from "../lib/api";
 import type { Participant, Wager } from "../lib/types";
 
 /// Everyone in the wager, and how each of them voted.
@@ -12,10 +13,14 @@ export function Players({
   wager,
   meId,
   required,
+  /// False until the outcome is due. The contract refuses a vote before then,
+  /// so "has not voted" would be blaming people for a door that is still shut.
+  votingOpen,
 }: {
   wager: Wager;
   meId: string;
   required?: number;
+  votingOpen: boolean;
 }) {
   const joined = wager.participants.filter((p) => p.state === "JOINED");
   if (!joined.length) return null;
@@ -23,19 +28,26 @@ export function Players({
   const voted = joined.filter((p) => p.attestedAt).length;
 
   const vote = (p: Participant) => {
-    if (!p.attestedAt) return { text: "Has not voted", tone: "waiting" as const };
     if (p.conceded) return { text: "Conceded", tone: "conceded" as const };
-    return { text: `Says "${wager.sideLabels[p.attestedChoice ?? 0]}"`, tone: "voted" as const };
+    if (p.attestedAt) {
+      return { text: `Says "${wager.sideLabels[p.attestedChoice ?? 0]}"`, tone: "voted" as const };
+    }
+    // Before the outcome is due nobody can have voted, so say what is actually
+    // true — that it is not their turn yet — rather than marking everyone
+    // delinquent for a deadline that has not arrived.
+    return votingOpen
+      ? { text: "Has not voted", tone: "waiting" as const }
+      : { text: "Not yet", tone: "waiting" as const };
   };
 
   return (
     <>
       <h2>Who is in</h2>
-      {required != null && (
-        <p className="small muted" style={{ marginTop: -4 }}>
-          {voted} of {joined.length} have voted. {required} must agree to settle it.
-        </p>
-      )}
+      <p className="small muted" style={{ marginTop: -4 }}>
+        {votingOpen
+          ? `${voted} of ${joined.length} have voted${required != null ? `. ${required} must agree to settle it.` : "."}`
+          : `Voting opens in ${timeUntil(wager.eventDeadline).replace(" left", "")}, when the outcome is due — ${new Date(wager.eventDeadline).toLocaleString()}.`}
+      </p>
       <div className="stack">
         {joined.map((p) => {
           const { text, tone } = vote(p);
