@@ -52,6 +52,17 @@ export function Landing() {
           </Link>
           <span className="landing-note">No app to install. No seed phrase. Free to create.</span>
         </div>
+
+        {/* Said up front rather than buried in the section about escrow. The
+            first question a stranger has about a page holding money is who is
+            holding it, and the answer is better than the one they assume. */}
+        <p className="landing-trust">
+          <span className="landing-trust-mark" aria-hidden="true">
+            ◈
+          </span>
+          Your money is held on <b>Base</b> &mdash; the blockchain built by{" "}
+          <b>Coinbase</b> &mdash; not by us.
+        </p>
       </section>
 
       <section className="landing-section">
@@ -116,10 +127,10 @@ export function Landing() {
           your friends, where it belongs.
         </p>
         <p className="landing-body">
-          It isn&rsquo;t a promise, either. The money sits in a contract on{" "}
-          <b>Base, the blockchain built by Coinbase</b> &mdash; not in an account we control and
-          not on a balance sheet you have to take our word for. We could not spend it if we
-          wanted to, and you can check that yourself.
+          It isn&rsquo;t a promise, either. The money sits in a contract on Base, not in an
+          account we control and not on a balance sheet you have to take our word for. We could
+          not spend it if we wanted to, and you can check that yourself &mdash; the escrow&rsquo;s
+          address is at the bottom of this page.
         </p>
       </section>
 
