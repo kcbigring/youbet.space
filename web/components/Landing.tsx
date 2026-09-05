@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
 import { FoundingSlots } from "./FoundingSlots";
+import { hasWagerBook, wagerBookAddress } from "../lib/contracts";
 
 /// The public front door. Someone arriving from a friend's text has no idea what
 /// this is, and the honest pitch is short: it is the bet you already make,
@@ -114,6 +115,12 @@ export function Landing() {
           bet turning into an argument, so the incentive to settle honestly sits with you and
           your friends, where it belongs.
         </p>
+        <p className="landing-body">
+          It isn&rsquo;t a promise, either. The money sits in a contract on{" "}
+          <b>Base, the blockchain built by Coinbase</b> &mdash; not in an account we control and
+          not on a balance sheet you have to take our word for. We could not spend it if we
+          wanted to, and you can check that yourself.
+        </p>
       </section>
 
       <section className="landing-section">
@@ -129,8 +136,8 @@ export function Landing() {
           <div className="landing-card">
             <h3>Not a crypto product</h3>
             <p>
-              There&rsquo;s a blockchain under here doing the escrow, and you will never once
-              have to think about it. No wallet to set up, no seed phrase, no gas.
+              Base is doing the escrow underneath, and you will never once have to think
+              about it. No wallet to set up, no seed phrase, no gas to buy.
             </p>
           </div>
           <div className="landing-card">
@@ -170,7 +177,19 @@ export function Landing() {
 
       <footer className="landing-footer">
         <Logo size={18} />
-        <span className="landing-note">Currently running on test funds with invited groups.</span>
+        <span className="landing-note">Currently running on play money with invited groups.</span>
+        {/* The address, not a badge. Anyone can read what is holding the money,
+            which is the only version of "trust us" worth printing. */}
+        {hasWagerBook && (
+          <a
+            className="landing-note landing-contract"
+            href={`https://basescan.org/address/${wagerBookAddress}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Escrow on Base · {wagerBookAddress.slice(0, 6)}…{wagerBookAddress.slice(-4)}
+          </a>
+        )}
       </footer>
     </div>
   );
