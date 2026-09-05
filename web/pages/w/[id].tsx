@@ -31,6 +31,9 @@ interface Detail {
     attestationsRequired: number;
     attestations: number[];
   } | null;
+  /// What this account can withdraw right now, read from the chain. Credits are
+  /// global, so one withdrawal collects across every wager.
+  claimableCents: number | null;
 }
 
 export default function WagerDetail() {
@@ -138,6 +141,7 @@ export default function WagerDetail() {
   const needsOpponent = wager.status === "OPEN" && sideCount(joined, 1 - (me?.side ?? 0)) === 0;
   const canResolve = wager.status === "LOCKED" && me?.state === "JOINED" && !me.attestedAt;
   const canWithdraw = ["SETTLED", "REFUNDED", "CANCELLED"].includes(wager.status) && me?.state === "JOINED";
+  const claimable = detail.claimableCents ?? 0;
 
   return (
     <Layout title={wager.group?.name ?? "Challenge"}>
@@ -424,15 +428,31 @@ export default function WagerDetail() {
         </div>
       )}
 
-      {canWithdraw && (
-        <button
-          className="block"
-          style={{ marginTop: 12 }}
-          disabled={busy || wallet.busy}
-          onClick={() => act(() => onChain(wager.id, [bookCall("withdraw")]))}
-        >
-          Claim everything you are owed
-        </button>
+      {/* Say the number. Someone who just lost $10 is still owed their $1 bond
+          back, and "claim everything you are owed" over a red result reads as
+          winnings that never existed. Nothing owed, no button. */}
+      {canWithdraw && claimable > 0 && (
+        <>
+          <button
+            className="block"
+            style={{ marginTop: 12 }}
+            disabled={busy || wallet.busy}
+            onClick={() => act(() => onChain(wager.id, [bookCall("withdraw")]))}
+          >
+            Claim {usd(claimable)}
+          </button>
+          <p className="small muted" style={{ marginTop: 8 }}>
+            {me?.netCents != null && me.netCents < 0
+              ? "Your bond, back where it came from. Losing the bet does not cost you the bond."
+              : "Everything you are owed, across every bet you have settled."}
+          </p>
+        </>
+      )}
+
+      {canWithdraw && claimable === 0 && (
+        <p className="small muted" style={{ marginTop: 12 }}>
+          Nothing left to collect on this one.
+        </p>
       )}
 
       {invited.length > 0 && (

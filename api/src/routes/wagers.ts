@@ -326,6 +326,7 @@ router.get(
     });
 
     let onchain = null;
+    let claimableCents: number | null = null;
     if (wager.onchainId) {
       try {
         // Reconcile on read, rather than trusting the client to have told us.
@@ -338,12 +339,24 @@ router.get(
         // authority on who paid, so ask it every time someone looks.
         onchain = await syncFromChain(wager.id);
         wager = await loadWager(req.params.id, req.userId!);
+
+        // What this account can actually withdraw right now. Credits are global
+        // — one call collects across every wager — so the number has to come
+        // from the chain rather than being inferred from this wager's result.
+        // A loser is still owed their bond back, and telling them to "claim
+        // everything you are owed" without saying what that is reads as
+        // winnings they did not get.
+        const me = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } });
+        if (me.walletAddress) {
+          const credits: bigint = await getBook().credits(me.walletAddress);
+          claimableCents = unitsToCents(credits);
+        }
       } catch (error) {
         console.warn(`Could not read on-chain state for wager ${wager.onchainId}`, error);
       }
     }
 
-    res.json({ ok: true, wager, comments, onchain });
+    res.json({ ok: true, wager, comments, onchain, claimableCents });
   })
 );
 
