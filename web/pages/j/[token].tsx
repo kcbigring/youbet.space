@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { api, setToken, usd, ApiError } from "../../lib/api";
+import { api, getToken, setToken, usd, ApiError } from "../../lib/api";
 import { Banner } from "../../components/Layout";
 
 interface InvitePreview {
@@ -27,6 +27,12 @@ export default function JoinByLink() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /// Whether whoever opened this link is already signed in. They are not a new
+  /// user, and claiming would have quietly given them a second account with no
+  /// wallet and none of their history.
+  const [signedIn, setSignedIn] = useState(false);
+
+  useEffect(() => setSignedIn(Boolean(getToken())), []);
 
   useEffect(() => {
     if (typeof token !== "string") return;
@@ -40,12 +46,17 @@ export default function JoinByLink() {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post<{
-        token: string;
-        landing: { groupId: string | null; wagerId: string | null };
-      }>("/auth/claim", { token, displayName: name });
+      const res = signedIn
+        ? await api.post<{
+            token?: string;
+            landing: { groupId: string | null; wagerId: string | null };
+          }>(`/auth/invite/${token}/accept`, {})
+        : await api.post<{
+            token: string;
+            landing: { groupId: string | null; wagerId: string | null };
+          }>("/auth/claim", { token, displayName: name });
 
-      setToken(res.token);
+      if (res.token) setToken(res.token);
       const destination = res.landing.wagerId
         ? `/w/${res.landing.wagerId}`
         : res.landing.groupId
@@ -89,6 +100,7 @@ export default function JoinByLink() {
               </div>
             )}
 
+            {!signedIn && (
             <div className="field" style={{ marginTop: 20 }}>
               <label htmlFor="name">Your name</label>
               <input
@@ -99,19 +111,27 @@ export default function JoinByLink() {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
+            )}
             <Banner>{error}</Banner>
 
-            <button className="block" style={{ marginTop: 14 }} onClick={accept} disabled={busy || name.length < 1}>
+            <button
+              className="block"
+              style={{ marginTop: 14 }}
+              onClick={accept}
+              disabled={busy || (!signedIn && name.length < 1)}
+            >
               {busy ? "One moment…" : invite.wager ? "Take the bet" : "Join the group"}
             </button>
 
             {/* No phone is asked for here: the link is the credential, and a
                 number nobody has proven is not one. Someone who already has an
                 account proves theirs the usual way, and the invite follows. */}
-            <p className="small muted center" style={{ marginTop: 14 }}>
-              Already have an account?{" "}
-              <a href={`/signin?invite=${encodeURIComponent(String(token))}`}>Sign in instead</a>
-            </p>
+            {!signedIn && (
+              <p className="small muted center" style={{ marginTop: 14 }}>
+                Already have an account?{" "}
+                <a href={`/signin?invite=${encodeURIComponent(String(token))}`}>Sign in instead</a>
+              </p>
+            )}
 
             <p className="small muted center" style={{ marginTop: 14 }}>
               No password, no seed phrase. We create your wallet for you.

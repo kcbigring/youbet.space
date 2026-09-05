@@ -28,6 +28,13 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
+    // The node the end-to-end harness starts. viem calls this chain `foundry`
+    // and defaults it to the same id and port, so the browser needs no config
+    // of its own to reach it.
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+    },
     // Primary target — Base.
     base_sepolia: {
       url: process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",

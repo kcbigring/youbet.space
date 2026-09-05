@@ -229,6 +229,30 @@ router.get(
   })
 );
 
+/// Accepts an invite as the person already signed in.
+///
+/// Someone who follows a link while holding a session is not a new user, and
+/// claiming was the only path a link offered — so a friend who already had an
+/// account got a second one, with no wallet, no history, and no way back to
+/// the first. This puts the invite on the account they are actually using.
+router.post(
+  "/invite/:token/accept",
+  authenticate,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const result = await consumeInviteLink(req.params.token);
+    if (!result.ok) throw badRequest(result.reason);
+    const { invite } = result;
+
+    await applyInvite(req.userId!, invite);
+    await prisma.invite.update({ where: { id: invite.id }, data: { usedAt: new Date() } });
+
+    res.json({
+      ok: true,
+      landing: { groupId: invite.groupId, wagerId: invite.wagerId },
+    });
+  })
+);
+
 const claimSchema = z.object({
   token: z.string().min(10),
   displayName: z.string().trim().min(1).max(60),
