@@ -42,6 +42,10 @@ export default function WagerDetail() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState("");
+  /// Which answer is waiting on a second tap. Saying how a wager went is a
+  /// transaction, it is recorded once, and there is no undoing it — a misplaced
+  /// thumb on a phone should not cost someone the pot.
+  const [confirming, setConfirming] = useState<null | "won" | "lost">(null);
   const wallet = useWallet();
 
   const load = useCallback(async () => {
@@ -118,6 +122,9 @@ export default function WagerDetail() {
   const joined = wager.participants.filter((p) => p.state === "JOINED");
   const invited = wager.participants.filter((p) => p.state === "INVITED" && p.userId !== user.id);
   const pot = wager.stakeCents * joined.length;
+  const opponents = joined.filter((p) => p.userId !== user.id);
+  const opponentName =
+    opponents.length === 1 ? opponents[0].user.displayName || "the other side" : "the other side";
   const eventOver = new Date(wager.eventDeadline) < new Date();
 
   const sideCount = (list: typeof wager.participants, s: number) =>
@@ -261,51 +268,91 @@ export default function WagerDetail() {
 
       {canResolve && (
         <>
-          <h2>How did it go?</h2>
+          <h2>{eventOver ? "How did it go?" : "Not over yet"}</h2>
           {eventOver && (
             <p className="small muted" style={{ marginTop: -4 }}>
               {onchain?.attestationsRequired ?? 0} of {onchain?.participants ?? 0} have to agree before
               the money moves.
             </p>
           )}
-          <div className="stack">
-            {/* Two answers, not three. "I won" claims your own side; "I lost"
-                concedes, which is not the same as attesting for the other side
-                and is strictly better for everyone — a wager nobody disputed
-                settles at once and returns every bond, where an attested one
-                confiscates the bond of anyone who never spoke up.
+          {/* Two answers, not three. "I won" claims your own side; "I lost"
+              concedes, which is not the same as attesting for the other side
+              and is strictly better for everyone — a wager nobody disputed
+              settles at once and returns every bond, where an attested one
+              confiscates the bond of anyone who never spoke up.
 
-                Both stay on screen before the outcome is due, with the winning
-                claim disabled and saying when it opens. Hiding it left one
-                button on the page and made the app look like it had decided
-                the loss — which is exactly how it read. */}
-            <button
-              className="side-option"
-              disabled={busy || wallet.busy || !eventOver}
-              onClick={() =>
-                act(() =>
-                  onChain(wager.id, [bookCall("attest", [BigInt(wager.onchainId!), me?.side ?? 0])])
-                )
-              }
-            >
-              <b>I won</b>
-              <div className="small muted" style={{ marginTop: 4 }}>
-                {eventOver
-                  ? `“${wager.sideLabels[me?.side ?? 0]}” is what happened`
-                  : `Opens ${timeUntil(wager.eventDeadline).replace(" left", " from now")}, when the outcome is due`}
+              Giving up is available before the outcome is due and claiming a
+              win is not, which looks lopsided until you say what it is: a
+              forfeit. You can always walk away from a bet; you cannot claim to
+              have won one that has not happened. The copy changes with the
+              clock so the button means what it says at the time. */}
+          {confirming ? (
+            <div className="card">
+              <b>{confirming === "won" ? "Say you won?" : eventOver ? "Say you lost?" : "Give it up?"}</b>
+              <p className="small muted" style={{ margin: "8px 0 14px" }}>
+                {confirming === "won" ? (
+                  <>
+                    You are putting on record that &ldquo;{wager.sideLabels[me?.side ?? 0]}&rdquo; is what
+                    happened. If the others agree, the {usd(pot)} pot pays out to your side. This is a
+                    transaction and it cannot be taken back.
+                  </>
+                ) : (
+                  <>
+                    Your {usd(wager.stakeCents)} goes to {opponentName}, and your {usd(wager.bondCents)}{" "}
+                    bond comes back. It settles the moment you confirm, and it cannot be taken back.
+                  </>
+                )}
+              </p>
+              <div className="stack">
+                <button
+                  className="block"
+                  disabled={busy || wallet.busy}
+                  onClick={() =>
+                    act(async () => {
+                      const call =
+                        confirming === "won"
+                          ? bookCall("attest", [BigInt(wager.onchainId!), me?.side ?? 0])
+                          : bookCall("concede", [BigInt(wager.onchainId!)]);
+                      await onChain(wager.id, [call]);
+                      setConfirming(null);
+                    })
+                  }
+                >
+                  {busy || wallet.busy ? "Sending…" : confirming === "won" ? "Yes, I won" : "Yes, pay them"}
+                </button>
+                <button className="ghost block" disabled={busy || wallet.busy} onClick={() => setConfirming(null)}>
+                  Cancel
+                </button>
               </div>
-            </button>
-            <button
-              className="side-option"
-              disabled={busy || wallet.busy}
-              onClick={() => act(() => onChain(wager.id, [bookCall("concede", [BigInt(wager.onchainId!)])]))}
-            >
-              <b>I lost &mdash; pay them now</b>
-              <div className="small muted" style={{ marginTop: 4 }}>
-                Settles immediately and everyone gets their {usd(wager.bondCents)} bond back
-              </div>
-            </button>
-          </div>
+            </div>
+          ) : (
+            <div className="stack">
+              <button
+                className="side-option"
+                disabled={busy || wallet.busy || !eventOver}
+                onClick={() => setConfirming("won")}
+              >
+                <b>I won</b>
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  {eventOver
+                    ? `“${wager.sideLabels[me?.side ?? 0]}” is what happened`
+                    : `Opens ${timeUntil(wager.eventDeadline).replace(" left", " from now")}, when the outcome is due`}
+                </div>
+              </button>
+              <button
+                className="side-option"
+                disabled={busy || wallet.busy}
+                onClick={() => setConfirming("lost")}
+              >
+                <b>{eventOver ? "I lost — pay them now" : "I give up — pay them now"}</b>
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  {eventOver
+                    ? `Settles immediately and everyone gets their ${usd(wager.bondCents)} bond back`
+                    : `You can forfeit at any time. Settles immediately and your ${usd(wager.bondCents)} bond comes back.`}
+                </div>
+              </button>
+            </div>
+          )}
           <p className="small muted">
             Say so by {new Date(wager.resolutionDeadline).toLocaleString()} or your {usd(wager.bondCents)} bond
             goes to whoever did.
