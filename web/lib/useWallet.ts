@@ -8,7 +8,7 @@ import {
 } from "wagmi";
 import { createClient, custom, type EIP1193Provider } from "viem";
 import { waitForCallsStatus, type WaitForCallsStatusReturnType } from "viem/actions";
-import { callCapabilities, activeChain } from "./wagmi";
+import { callCapabilities, activeChain, config } from "./wagmi";
 import { api, getToken } from "./api";
 
 /// Addresses already reported this session. Module-level, so remounting a page
@@ -66,19 +66,26 @@ export function useWallet() {
   /// which carry the events the caller would otherwise have to guess at.
   const send = useCallback(
     async (calls: Call[]): Promise<SendResult> => {
-      if (!connector) throw new Error("Connect a wallet first");
-
+      // Let wagmi resolve the connector. Requiring one from `useAccount` up
+      // front turned a wallet that had not finished reconnecting into "Connect
+      // a wallet first" on a wallet that was already connected — and the check
+      // existed only to poll for inclusion afterwards, which is not a reason to
+      // refuse to send.
       const { id } = await sendCallsAsync({
         calls,
         chainId: activeChain.id,
         capabilities: callCapabilities,
       });
 
-      // The status lives with the wallet, not the chain, so this asks the
-      // connector rather than our RPC transport.
-      const provider = (await connector.getProvider({
-        chainId: activeChain.id,
-      })) as EIP1193Provider;
+      // The call status lives with the wallet, not the chain, so this has to
+      // ask the connector rather than our RPC transport. By now the batch has
+      // been accepted, so a connection certainly exists even if the hook had
+      // not caught up when the button was pressed.
+      const active =
+        connector ?? config.state.connections.get(config.state.current ?? "")?.connector;
+      if (!active) return { id, status: "pending", statusCode: 100 } as SendResult;
+
+      const provider = (await active.getProvider({ chainId: activeChain.id })) as EIP1193Provider;
       const client = createClient({ chain: activeChain, transport: custom(provider) });
 
       // A reverted batch is an error, not a result: without this the caller

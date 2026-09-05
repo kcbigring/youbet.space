@@ -431,7 +431,18 @@ export default function WagerDetail() {
       {/* Say the number. Someone who just lost $10 is still owed their $1 bond
           back, and "claim everything you are owed" over a red result reads as
           winnings that never existed. Nothing owed, no button. */}
-      {canWithdraw && claimable > 0 && (
+      {canWithdraw && claimable > 0 && !wallet.isConnected && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <b>{usd(claimable)} is waiting for you</b>
+          <p className="small muted" style={{ margin: "6px 0 12px" }}>
+            It is held in the contract under your name. Connect the wallet you played with to
+            collect it.
+          </p>
+          <ConnectWallet />
+        </div>
+      )}
+
+      {canWithdraw && claimable > 0 && wallet.isConnected && (
         <>
           <button
             className="block"
