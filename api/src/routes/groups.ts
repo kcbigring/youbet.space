@@ -1,13 +1,16 @@
 import { Router } from "express";
+import { ethers } from "ethers";
 import { z } from "zod";
 import prisma from "../prisma";
 import { env } from "../env";
 import { sendSms } from "../twilio";
 import { asyncHandler, parseBody } from "../lib/http";
-import { badRequest, forbidden, notFound } from "../lib/errors";
+import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { reputationFor } from "../lib/reputation";
 import { standingFor } from "../lib/standing";
+import { contractAt } from "../lib/chain";
+import { centsToUnits } from "../lib/money";
 
 const router = Router();
 router.use(authenticate);
@@ -80,7 +83,9 @@ router.get(
     const group = await prisma.group.findUniqueOrThrow({
       where: { id: req.params.id },
       include: {
-        members: { include: { user: { select: { id: true, displayName: true, handle: true, phone: true } } } },
+        // The phone comes back only so the client can show its last four
+        // digits; the rest is nobody else's business, and it is cut below.
+        members: { include: { user: { select: { id: true, displayName: true, handle: true, phone: true, walletAddress: true } } } },
         wagers: {
           orderBy: { createdAt: "desc" },
           take: 25,
@@ -88,7 +93,84 @@ router.get(
         },
       },
     });
-    res.json({ ok: true, group });
+    res.json({
+      ok: true,
+      group: {
+        ...group,
+        members: group.members.map((m) => ({
+          ...m,
+          user: { ...m.user, phone: lastFour(m.user.phone) },
+        })),
+      },
+    });
+  })
+);
+
+/// Enough of a number to tell two friends called Mike apart, and no more.
+const lastFour = (phone: string | null) => {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : null;
+};
+
+/// Everything the owner's wallet needs to mirror this group on-chain.
+///
+/// The escrow layer genuinely checks group membership — `createWager` refuses a
+/// group wager from a non-member and reads the group's limits from the registry
+/// — so a group that exists only in Postgres cannot hold a wager at all. The
+/// API signs nothing, so the owner does this from their own wallet.
+router.get(
+  "/:id/onchain-params",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { group } = await membershipOrThrow(req.params.id, req.userId!);
+
+    const members = await prisma.groupMember.findMany({
+      where: { groupId: group.id },
+      include: { user: { select: { walletAddress: true } } },
+    });
+
+    res.json({
+      ok: true,
+      registry: env.groupRegistryAddress ?? null,
+      onchainId: group.onchainId,
+      // Ties the on-chain record to this one without putting a name on a public
+      // chain. Private wagers between friends should not publish the friends.
+      metadataHash: ethers.keccak256(ethers.toUtf8Bytes(`youbet:group:${group.id}`)),
+      maxStakeUnits: centsToUnits(group.maxStakeCents).toString(),
+      maxPotUnits: centsToUnits(group.maxPotCents).toString(),
+      // Every member with a wallet, every time: adding someone already on-chain
+      // is a no-op in the registry, so the client never has to work out who is
+      // missing.
+      memberAddresses: members.map((m) => m.user.walletAddress).filter(Boolean),
+    });
+  })
+);
+
+/// Links the on-chain group to this record, once the owner has created it.
+router.post(
+  "/:id/link",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { group } = await membershipOrThrow(req.params.id, req.userId!);
+    if (group.ownerId !== req.userId) throw forbidden("Only the owner can put this group on-chain");
+    if (group.onchainId) throw conflict("This group is already on-chain");
+
+    const { onchainId } = parseBody(z.object({ onchainId: z.number().int().positive() }), req);
+    if (!env.groupRegistryAddress) throw badRequest("Groups are not configured on this network yet");
+
+    // Verify rather than believe: a client could otherwise point its group at
+    // somebody else's on-chain group and inherit their limits and roster.
+    const registry = contractAt("GroupRegistry", env.groupRegistryAddress);
+    const onchain = await registry.groups(onchainId);
+    const owner = await prisma.user.findUniqueOrThrow({ where: { id: group.ownerId } });
+    if (!onchain.exists) throw badRequest("No such group on-chain");
+    if (
+      !owner.walletAddress ||
+      onchain.owner.toLowerCase() !== owner.walletAddress.toLowerCase()
+    ) {
+      throw badRequest("That group was created by a different account");
+    }
+
+    const updated = await prisma.group.update({ where: { id: group.id }, data: { onchainId } });
+    res.json({ ok: true, group: updated });
   })
 );
 

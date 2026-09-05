@@ -1,6 +1,6 @@
-import { wagerBookAbi, playDollarAbi } from "./abi";
+import { wagerBookAbi, playDollarAbi, groupRegistryAbi } from "./abi";
 
-export { wagerBookAbi, playDollarAbi };
+export { wagerBookAbi, playDollarAbi, groupRegistryAbi };
 
 /// Stakes are denominated in a six-decimal dollar token — test dollars on
 /// testnet, USDC on mainnet — so "$25" stays $25 rather than tracking ETH.
@@ -12,6 +12,13 @@ export const hasStakeToken = /^0x[a-fA-F0-9]{40}$/.test(stakeTokenAddress);
 export const wagerBookAddress = (process.env.NEXT_PUBLIC_WAGER_BOOK_ADDRESS || "") as `0x${string}`;
 
 export const hasWagerBook = /^0x[a-fA-F0-9]{40}$/.test(wagerBookAddress);
+
+/// On-chain group membership. The escrow reads this to decide whether someone
+/// may open a wager inside a group, so a group has to exist here before its
+/// wagers can.
+export const groupRegistryAddress = (process.env.NEXT_PUBLIC_GROUP_REGISTRY_ADDRESS ||
+  "") as `0x${string}`;
+export const hasGroupRegistry = /^0x[a-fA-F0-9]{40}$/.test(groupRegistryAddress);
 
 /// Mirrors WagerBook.Status on-chain. Index 0 is an id that was never created.
 export const WagerStatus = {

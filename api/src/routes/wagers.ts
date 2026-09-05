@@ -8,7 +8,7 @@ import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { authenticate, createInviteLink, normalizePhone, type AuthedRequest } from "../lib/auth";
 import { parseWager } from "../lib/parse";
 import { centsToUnits, formatUsd, unitsToCents } from "../lib/money";
-import { artifact, getBook, hashTerms, readWagerParticipants, readWagerState } from "../lib/chain";
+import { artifact, contractAt, getBook, hashTerms, readWagerParticipants, readWagerState } from "../lib/chain";
 import { ethers } from "ethers";
 import { monthlyVolumeCents, reputationFor } from "../lib/reputation";
 import { standingFor } from "../lib/standing";
@@ -415,6 +415,22 @@ router.get(
       : null;
 
     const creator = await prisma.user.findUniqueOrThrow({ where: { id: wager.creatorId } });
+
+    // The escrow checks group membership itself, and refuses a group wager from
+    // somebody the registry does not know. Catching that here costs one read;
+    // letting it through costs a wallet prompt that fails with "not a group
+    // member" and no way to tell what to do about it.
+    if (group?.onchainId && env.groupRegistryAddress) {
+      const registry = contractAt("GroupRegistry", env.groupRegistryAddress);
+      const known = creator.walletAddress
+        ? await registry.isMember(group.onchainId, creator.walletAddress)
+        : false;
+      if (!known) {
+        throw badRequest(
+          `Ask whoever owns ${group.name} to add you on-chain — the escrow checks the group's roster, not ours.`
+        );
+      }
+    }
 
     res.json({
       ok: true,

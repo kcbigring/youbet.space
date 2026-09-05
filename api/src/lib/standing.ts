@@ -42,12 +42,17 @@ export const TIERS: Tier[] = [
     maxStakeCents: 1_000, // $10
     openWagers: 2,
     invitesPerDay: 3,
-    canCreateGroups: false,
+    // Groups are how friends organise, so gating them behind settled bets meant
+    // nobody could form the group they would have bet in — backwards for a
+    // product whose whole premise is betting with people you already know. The
+    // three-invites-a-day limit is what actually throttles farming, and a group
+    // grants nobody any money.
+    canCreateGroups: true,
   },
   {
     key: "REGULAR",
     name: "Regular",
-    blurb: "You settle up. You can start your own groups now.",
+    blurb: "You settle up. Bigger stakes and more people at once.",
     settled: 3,
     attestation: 80,
     maxStakeCents: 2_500, // $25

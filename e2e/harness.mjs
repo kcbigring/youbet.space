@@ -191,6 +191,7 @@ async function main() {
     NEXT_PUBLIC_CHAIN_ID: "31337",
     NEXT_PUBLIC_WAGER_BOOK_ADDRESS: WagerBook,
     NEXT_PUBLIC_STAKE_TOKEN_ADDRESS: StakeToken,
+    NEXT_PUBLIC_GROUP_REGISTRY_ADDRESS: GroupRegistry,
     NEXT_PUBLIC_E2E_ACCOUNT: ALICE,
     // Gas is free on a local node, so no paymaster: the app is built to work
     // without one and this exercises that path too.
@@ -216,6 +217,7 @@ async function main() {
         E2E_RPC_URL: `http://127.0.0.1:${CHAIN_PORT}`,
         E2E_WAGER_BOOK: WagerBook,
         E2E_STAKE_TOKEN: StakeToken,
+        E2E_GROUP_REGISTRY: GroupRegistry,
         E2E_ALICE: ALICE,
         E2E_BOB: BOB,
         E2E_CAROL: CAROL,

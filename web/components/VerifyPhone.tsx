@@ -8,6 +8,7 @@ import {
   type ConfirmationResult,
 } from "../lib/firebase";
 import { Banner } from "./Layout";
+import { normalizePhone } from "../lib/phone";
 
 /// Verification is deliberately not the front door. People arrive through a
 /// friend's link and start playing; this is what they do before real money is
@@ -28,7 +29,11 @@ export function VerifyPhone({ onVerified }: { onVerified?: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const e164 = phone.trim().startsWith("+") ? phone.trim() : `+1${phone.replace(/\D/g, "")}`;
+      // Not a bare `+1` prefix: a number typed with its leading 1 became
+      // "+1 1720…", which is nobody — and the point of this screen is that the
+      // number ends up being the one they actually hold.
+      const e164 = normalizePhone(phone);
+      if (!e164) throw new Error("That phone number does not look right.");
       setConfirmation(await sendVerificationCode(e164, "recaptcha-slot"));
     } catch (err) {
       resetVerifier();

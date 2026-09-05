@@ -5,6 +5,7 @@ import { useSession } from "../../lib/useSession";
 import type { Group, Wager, User, Reputation } from "../../lib/types";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
+import { GroupOnChain } from "../../components/GroupOnChain";
 import { WagerCard } from "../../components/WagerCard";
 
 interface GroupDetail extends Group {
@@ -121,7 +122,9 @@ export default function GroupPage() {
 
       {tab === "members" && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ marginBottom: 20 }}>
+          <GroupOnChain groupId={group.id} isOwner={group.ownerId === user.id} />
+
+          <div style={{ marginBottom: 20, marginTop: 12 }}>
             <ShareInvite
               endpoint={`/groups/${group.id}/invites`}
               shareTitle={group.name}

@@ -7,6 +7,8 @@ import { encodeFunctionData } from "viem";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
 import { EmailReminders } from "../../components/EmailReminders";
+import { VerifyPhone } from "../../components/VerifyPhone";
+import { useConfig } from "../../lib/useConfig";
 import { Players } from "../../components/Players";
 import { ConnectWallet } from "../../components/ConnectWallet";
 import { TestMoney } from "../../components/TestMoney";
@@ -53,6 +55,7 @@ export default function WagerDetail() {
   /// Deleting a draft is one tap away from gone, so it takes two.
   const [deleting, setDeleting] = useState(false);
   const wallet = useWallet();
+  const config = useConfig();
 
   const load = useCallback(async () => {
     if (typeof id !== "string") return;
@@ -260,7 +263,24 @@ export default function WagerDetail() {
         </>
       )}
 
-      {canJoin && wallet.isConnected && (
+      {/* Said before they try, not after. The join is refused server-side, and
+          discovering that from an error message once the wallet has already
+          prompted is a bad way to learn you needed a phone number. */}
+      {canJoin && wallet.isConnected && config?.requireVerifiedPhone && !user.phoneVerified && (
+        <>
+          <h2>One thing first</h2>
+          <div className="card">
+            <p className="small muted" style={{ marginTop: 0 }}>
+              Money on a bet needs a proven phone number. It takes one text.
+            </p>
+            <VerifyPhone onVerified={() => load()} />
+          </div>
+        </>
+      )}
+
+      {canJoin &&
+        wallet.isConnected &&
+        !(config?.requireVerifiedPhone && !user.phoneVerified) && (
         <>
           <h2>Take a side</h2>
           <p className="small muted" style={{ marginTop: -4 }}>

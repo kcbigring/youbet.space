@@ -9,6 +9,7 @@ import { ConnectWallet } from "../components/ConnectWallet";
 import { TestMoney } from "../components/TestMoney";
 import { FoundingSlots } from "../components/FoundingSlots";
 import { Standing } from "../components/Standing";
+import { useConfig } from "../lib/useConfig";
 import { EmailReminders } from "../components/EmailReminders";
 
 interface Me {
@@ -39,6 +40,7 @@ export default function Wallet() {
   const [standing, setStanding] = useState<StandingType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const config = useConfig();
 
   useEffect(() => {
     if (!user) return;
@@ -187,17 +189,28 @@ export default function Wallet() {
         </>
       )}
 
-      {user && !(user as Me).phoneVerified && (
-        <>
-          <h2>Verify your phone</h2>
-          <div className="card">
-            <p className="small muted" style={{ marginTop: 0 }}>
-              Not needed while the alpha runs on test funds. Verify now and you are
-              ready the day real money turns on.
-            </p>
-            <VerifyPhone onVerified={() => router.reload()} />
+      <h2>Phone</h2>
+      {(user as Me).phoneVerified ? (
+        <div className="card">
+          <div className="between">
+            <b>Verified</b>
+            <span className="pill live">Done</span>
           </div>
-        </>
+          <p className="small muted" style={{ margin: "6px 0 0" }}>
+            Proven with Google Identity Platform. Nothing else to do.
+          </p>
+        </div>
+      ) : (
+        <div className="card">
+          <p className="small muted" style={{ marginTop: 0 }}>
+            {/* Told the truth either way: claiming it is optional when funding
+                is actually gated on it would be worse than saying nothing. */}
+            {config?.requireVerifiedPhone
+              ? "You need a proven number before you can put money on a bet."
+              : "Not needed while the alpha runs on play money. Do it now and you are ready the day real money turns on."}
+          </p>
+          <VerifyPhone onVerified={() => router.reload()} />
+        </div>
       )}
 
       <div className="divider" />

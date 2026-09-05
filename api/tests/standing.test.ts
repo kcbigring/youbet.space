@@ -16,7 +16,18 @@ describe("standing", () => {
     const s = standingFor(rep());
     expect(s.tier.key).toBe("NEW");
     expect(s.limits.maxStakeCents).toBe(1_000); // $10
-    expect(s.limits.canCreateGroups).toBe(false);
+    expect(s.limits.openWagers).toBe(2);
+  });
+
+  // What standing gates is money and volume. Organising is not a risk control:
+  // gating groups behind settled bets meant nobody could form the group they
+  // would have bet in, which is backwards for a product about betting with
+  // people you already know.
+  it("lets a new account form a group, and still holds the money back", () => {
+    const s = standingFor(rep());
+    expect(s.limits.canCreateGroups).toBe(true);
+    expect(s.limits.maxStakeCents).toBeLessThan(10_000);
+    expect(s.limits.invitesPerDay).toBe(3);
   });
 
   it("never lets a tier exceed the protocol cap", () => {

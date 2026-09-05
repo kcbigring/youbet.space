@@ -462,3 +462,53 @@ test.describe("a bet among three people", () => {
     expect(usd((await read<bigint>("credits", [BOB])) - before.bob)).toBe(0);
   });
 });
+
+/// Groups are the point of the product — private wagers between friends — and
+/// the escrow enforces them rather than taking our word for it: `createWager`
+/// asks the registry whether the person opening a group wager is a member, and
+/// reads the group's limits from it. So a group that lives only in Postgres
+/// cannot hold a wager at all.
+test.describe("a group", () => {
+  test.beforeAll(async ({ browser }) => {
+    await players(browser);
+  });
+
+  test("goes on-chain, carries its roster, and holds a wager", async () => {
+    await alice.page.goto("/groups", { waitUntil: "networkidle" });
+    await alice.page.click('button:has-text("New")');
+    await alice.page.fill("#name", "Sunday Golf");
+    await alice.page.click('button:has-text("Create group")');
+
+    await alice.page.locator("a", { hasText: "Sunday Golf" }).first().click();
+    await alice.page.getByRole("button", { name: "members", exact: true }).click();
+
+    // Bob joins off-chain through the link, exactly as a friend would.
+    const link = await alice.page.locator(".share-link input").first().inputValue();
+    await bob.page.goto(new URL(link).pathname, { waitUntil: "networkidle" });
+    await bob.page.click('button:has-text("Join the group")');
+    await bob.page.waitForURL(/\/groups\//, { timeout: 60_000 });
+
+    // The owner mirrors it: create the group, then put everyone on the roster.
+    await alice.page.reload({ waitUntil: "networkidle" });
+    await alice.page.getByRole("button", { name: "members", exact: true }).click();
+    await alice.page.click('button:has-text("Put it on-chain")');
+    await expect(alice.page.getByText(/this group is on-chain/i)).toBeVisible({ timeout: 120_000 });
+
+    await alice.page.click('button:has-text("Add everyone to the roster")');
+    await expect(alice.page.getByText(/on the roster/i)).toBeVisible({ timeout: 120_000 });
+
+    // Now a wager inside it. The registry check runs on-chain at creation, so
+    // this failing means the roster never landed.
+    await alice.page.goto("/create", { waitUntil: "networkidle" });
+    await alice.page.fill("textarea", "$10 that I break ninety on Sunday");
+    await alice.page.click('button:has-text("Continue")');
+    await alice.page.selectOption("#group", { label: "Sunday Golf" });
+    await alice.page.fill("#deadline", localInput((await chainNow()) + 600_000));
+    await alice.page.click('button:has-text("Send challenge")');
+    await alice.page.waitForURL(/\/w\//, { timeout: 120_000 });
+
+    const id = Number(await read<bigint>("wagerCount"));
+    const wager = (await read<{ groupId: bigint }>("getWager", [id])) as { groupId: bigint };
+    expect(Number(wager.groupId), "the wager carries a real group id").toBeGreaterThan(0);
+  });
+});
