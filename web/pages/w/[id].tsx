@@ -46,6 +46,8 @@ export default function WagerDetail() {
   /// transaction, it is recorded once, and there is no undoing it — a misplaced
   /// thumb on a phone should not cost someone the pot.
   const [confirming, setConfirming] = useState<null | "won" | "lost">(null);
+  /// Deleting a draft is one tap away from gone, so it takes two.
+  const [deleting, setDeleting] = useState(false);
   const wallet = useWallet();
 
   const load = useCallback(async () => {
@@ -171,6 +173,26 @@ export default function WagerDetail() {
               Publish this challenge
             </button>
           )}
+          {/* Safe to offer only here: a draft has reached nobody and holds no
+              money, so throwing it away takes nothing from anyone. Once it is
+              on-chain the escrow is the record and there is no deleting it. */}
+          <button
+            className="ghost block"
+            style={{ marginTop: 8 }}
+            disabled={busy || wallet.busy}
+            onClick={() =>
+              act(async () => {
+                if (deleting) {
+                  await api.del(`/wagers/${wager.id}`);
+                  await router.replace("/");
+                  return;
+                }
+                setDeleting(true);
+              })
+            }
+          >
+            {deleting ? "Tap again to delete it for good" : "Delete this draft"}
+          </button>
         </div>
       )}
 

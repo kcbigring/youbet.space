@@ -430,6 +430,37 @@ router.get(
 /// Links an on-chain wager id to its off-chain record. Verifies the terms and
 /// creator recorded on-chain match ours, so a client cannot point its wager at
 /// someone else's escrow.
+/// Throws away a draft.
+///
+/// Only ever a draft, and only the creator's own: once a wager is on-chain the
+/// escrow is the record and no database row can retract it. Deleting here takes
+/// the participants and invite links with it, which is the point — a draft that
+/// was never published reached nobody, so nothing is being taken away from
+/// anyone else.
+router.delete(
+  "/:id",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const wager = await loadWager(req.params.id, req.userId!);
+    if (wager.creatorId !== req.userId) throw forbidden("Only the creator can delete this");
+    if (wager.status !== "DRAFT" || wager.onchainId) {
+      throw conflict("This wager is on-chain. It can be conceded or left to expire, but not deleted.");
+    }
+
+    // A create transaction that landed while its link call was lost leaves an
+    // escrow with no record pointing at it. It holds no money — stakes arrive
+    // on join, not create — but publishing is what the creator almost certainly
+    // wants, so say so rather than quietly orphaning it for good.
+    const creator = await prisma.user.findUniqueOrThrow({ where: { id: wager.creatorId } });
+    const orphan = await orphanedOnchainId(wager.termsHash, creator.walletAddress).catch(() => null);
+    if (orphan !== null && req.query.force !== "1") {
+      throw conflict("This one is already on-chain — publish it, or delete again to discard it anyway.");
+    }
+
+    await prisma.wager.delete({ where: { id: wager.id } });
+    res.json({ ok: true, deleted: wager.id });
+  })
+);
+
 router.post(
   "/:id/link",
   asyncHandler(async (req: AuthedRequest, res) => {
