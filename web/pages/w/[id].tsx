@@ -261,40 +261,51 @@ export default function WagerDetail() {
 
       {canResolve && (
         <>
-          <h2>{eventOver ? "How did it go?" : "Not settled yet"}</h2>
-          {/* Before the outcome is due, the contract will not accept a vote for
-              either side — so conceding is genuinely the only thing on offer.
-              Saying that outright beats presenting one button and letting it
-              look like the app has decided you lost. */}
+          <h2>{eventOver ? "How did it go?" : "Nothing to settle yet"}</h2>
           <p className="small muted" style={{ marginTop: -4 }}>
             {eventOver
-              ? `Say who won. ${onchain?.attestationsRequired ?? 0} of ${onchain?.participants ?? 0} have to agree before it pays out.`
-              : `Nobody votes until the outcome is due on ${new Date(wager.eventDeadline).toLocaleString()}. Until then the only way to end it early is to give it up.`}
+              ? `Say how it went. ${onchain?.attestationsRequired ?? 0} of ${onchain?.participants ?? 0} have to agree before the money moves.`
+              : `Nobody can say how it went until the outcome is due, ${timeUntil(wager.eventDeadline).replace(" left", " from now")}. Until then the only way to end it early is to hand it to them.`}
           </p>
           <div className="stack">
-            {eventOver &&
-              wager.sideLabels.map((label, index) => (
-                <button
-                  key={index}
-                  className="side-option"
-                  disabled={busy || wallet.busy}
-                  onClick={() =>
-                    act(() => onChain(wager.id, [bookCall("attest", [BigInt(wager.onchainId!), index])]))
-                  }
-                >
-                  {label} won
-                </button>
-              ))}
+            {/* Two answers, not three. "I won" claims your own side; "I lost"
+                concedes, which is not the same as voting for the other side
+                and is strictly better for everyone — a wager nobody disputed
+                settles at once and returns every bond, where an attested one
+                confiscates the bond of anyone who never spoke up. Offering the
+                raw side labels made the losing player pick the worse of two
+                identical-looking options. */}
+            {eventOver && (
+              <button
+                className="side-option"
+                disabled={busy || wallet.busy}
+                onClick={() =>
+                  act(() =>
+                    onChain(wager.id, [bookCall("attest", [BigInt(wager.onchainId!), me?.side ?? 0])])
+                  )
+                }
+              >
+                <b>I won</b>
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  &ldquo;{wager.sideLabels[me?.side ?? 0]}&rdquo; is what happened
+                </div>
+              </button>
+            )}
             <button
-              className="ghost block"
+              className={eventOver ? "side-option" : "ghost block"}
               disabled={busy || wallet.busy}
               onClick={() => act(() => onChain(wager.id, [bookCall("concede", [BigInt(wager.onchainId!)])]))}
             >
-              I lost &mdash; pay them now
+              <b>I lost &mdash; pay them now</b>
+              {eventOver && (
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  Settles immediately and everyone gets their {usd(wager.bondCents)} bond back
+                </div>
+              )}
             </button>
           </div>
           <p className="small muted">
-            Vote by {new Date(wager.resolutionDeadline).toLocaleString()} or your {usd(wager.bondCents)} bond
+            Say so by {new Date(wager.resolutionDeadline).toLocaleString()} or your {usd(wager.bondCents)} bond
             goes to whoever did.
           </p>
         </>
@@ -325,8 +336,8 @@ export default function WagerDetail() {
 
       {me?.attestedAt && wager.status === "LOCKED" && (
         <div className="banner info" style={{ marginTop: 20 }}>
-          You said {me.conceded ? "you lost" : `"${wager.sideLabels[me.attestedChoice ?? 0]}" won`}. Waiting on the
-          others until {new Date(wager.resolutionDeadline).toLocaleDateString()}.
+          You said {me.conceded ? "you lost" : "you won"}. Waiting on the others until{" "}
+          {new Date(wager.resolutionDeadline).toLocaleString()}.
         </div>
       )}
 

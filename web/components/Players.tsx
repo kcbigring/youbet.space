@@ -2,13 +2,17 @@ import { Avatar } from "./Layout";
 import { timeUntil } from "../lib/api";
 import type { Participant, Wager } from "../lib/types";
 
-/// Everyone in the wager, and how each of them voted.
+/// Everyone in the wager, which side they took, and whether they have said how
+/// it turned out.
 ///
-/// A wager is a claim about who owes whom, settled by the people in it. Hiding
-/// the tally until it resolves means someone can be one vote from losing $20
-/// and have no way to see it — so the votes are visible to every participant as
-/// they land, alongside enough of each phone number to tell two friends with
-/// the same first name apart.
+/// Two different acts happen here and the copy has to keep them apart: backing
+/// a side is the bet, saying who won is how it settles. Calling both of them
+/// "voting" made a roster where somebody had already picked a side read as
+/// though they had not.
+///
+/// The calls are visible to everyone as they land — being one call away from
+/// losing $20 with no way to see it is not a detail — alongside enough of each
+/// phone number to tell two friends with the same first name apart.
 export function Players({
   wager,
   meId,
@@ -25,19 +29,19 @@ export function Players({
   const joined = wager.participants.filter((p) => p.state === "JOINED");
   if (!joined.length) return null;
 
-  const voted = joined.filter((p) => p.attestedAt).length;
+  const said = joined.filter((p) => p.attestedAt).length;
 
-  const vote = (p: Participant) => {
-    if (p.conceded) return { text: "Conceded", tone: "conceded" as const };
+  const call = (p: Participant) => {
+    if (p.conceded) return { text: "Gave it up", tone: "conceded" as const };
     if (p.attestedAt) {
-      return { text: `Says "${wager.sideLabels[p.attestedChoice ?? 0]}"`, tone: "voted" as const };
+      return { text: `Said ${wager.sideLabels[p.attestedChoice ?? 0]} won`, tone: "voted" as const };
     }
-    // Before the outcome is due nobody can have voted, so say what is actually
-    // true — that it is not their turn yet — rather than marking everyone
-    // delinquent for a deadline that has not arrived.
+    // Before the outcome is due nobody can have said anything, so say what is
+    // actually true — that it is not their turn yet — rather than marking
+    // everyone delinquent for a deadline that has not arrived.
     return votingOpen
-      ? { text: "Has not voted", tone: "waiting" as const }
-      : { text: "Not yet", tone: "waiting" as const };
+      ? { text: "Not said yet", tone: "waiting" as const }
+      : { text: "Waiting on the outcome", tone: "waiting" as const };
   };
 
   return (
@@ -45,12 +49,17 @@ export function Players({
       <h2>Who is in</h2>
       <p className="small muted" style={{ marginTop: -4 }}>
         {votingOpen
-          ? `${voted} of ${joined.length} have voted${required != null ? `. ${required} must agree to settle it.` : "."}`
-          : `Voting opens in ${timeUntil(wager.eventDeadline).replace(" left", "")}, when the outcome is due — ${new Date(wager.eventDeadline).toLocaleString()}.`}
+          ? `${said} of ${joined.length} have said how it went${
+              required != null ? `. ${required} have to agree before the money moves.` : "."
+            }`
+          : `Nobody says how it went until the outcome is due, ${timeUntil(wager.eventDeadline).replace(
+              " left",
+              " from now"
+            )} — ${new Date(wager.eventDeadline).toLocaleString()}.`}
       </p>
       <div className="stack">
         {joined.map((p) => {
-          const { text, tone } = vote(p);
+          const { text, tone } = call(p);
           const name = p.user.displayName || "Friend";
           return (
             <div key={p.id} className="row player-row">
