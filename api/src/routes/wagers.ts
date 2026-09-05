@@ -243,6 +243,43 @@ router.post(
 
 // ------------------------------------------------------------------ reading
 
+type FeedWager = {
+  id: string;
+  status: string;
+  creatorId: string;
+  eventDeadline: Date;
+  participants: Array<{ userId: string; state: string; attestedAt: Date | null }>;
+};
+
+/// Groups the home screen by what the user has to do next (execution plan §17).
+///
+/// Every wager lands in exactly one bucket. A locked wager waiting on your call
+/// is also, literally, an active one — matching both printed it twice under two
+/// headings, which reads as broken data rather than an overlapping filter. The
+/// more urgent bucket wins.
+export function bucketWagers<T extends FeedWager>(wagers: T[], userId: string, now = new Date()) {
+  const mine = (w: T) => w.participants.find((p) => p.userId === userId);
+
+  const needsAttention = wagers.filter(
+    (w) =>
+      w.status === "LOCKED" &&
+      mine(w)?.state === "JOINED" &&
+      !mine(w)?.attestedAt &&
+      w.eventDeadline < now
+  );
+  const urgent = new Set(needsAttention.map((w) => w.id));
+
+  return {
+    drafts: wagers.filter((w) => w.status === "DRAFT" && w.creatorId === userId),
+    pending: wagers.filter((w) => w.status === "OPEN" && mine(w)?.state === "INVITED"),
+    active: wagers.filter(
+      (w) => ["OPEN", "LOCKED"].includes(w.status) && mine(w)?.state === "JOINED" && !urgent.has(w.id)
+    ),
+    needsAttention,
+    recent: wagers.filter((w) => ["SETTLED", "REFUNDED", "CANCELLED"].includes(w.status)).slice(0, 20),
+  };
+}
+
 router.get(
   "/",
   asyncHandler(async (req: AuthedRequest, res) => {
@@ -258,20 +295,7 @@ router.get(
       take: 100,
     });
 
-    const wagers = raw.map(redactPhones);
-    const mine = (w: (typeof wagers)[number]) => w.participants.find((p) => p.userId === req.userId);
-
-    // The home screen groups by what the user has to do next (execution plan §17).
-    res.json({
-      ok: true,
-      drafts: wagers.filter((w) => w.status === "DRAFT" && w.creatorId === req.userId),
-      pending: wagers.filter((w) => w.status === "OPEN" && mine(w)?.state === "INVITED"),
-      active: wagers.filter((w) => ["OPEN", "LOCKED"].includes(w.status) && mine(w)?.state === "JOINED"),
-      needsAttention: wagers.filter(
-        (w) => w.status === "LOCKED" && mine(w)?.state === "JOINED" && !mine(w)?.attestedAt && w.eventDeadline < new Date()
-      ),
-      recent: wagers.filter((w) => ["SETTLED", "REFUNDED", "CANCELLED"].includes(w.status)).slice(0, 20),
-    });
+    res.json({ ok: true, ...bucketWagers(raw.map(redactPhones), req.userId!) });
   })
 );
 
