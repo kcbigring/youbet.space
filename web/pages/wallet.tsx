@@ -9,11 +9,13 @@ import { ConnectWallet } from "../components/ConnectWallet";
 import { TestMoney } from "../components/TestMoney";
 import { FoundingSlots } from "../components/FoundingSlots";
 import { Standing } from "../components/Standing";
+import { EmailReminders } from "../components/EmailReminders";
 
 interface Me {
   id: string;
   displayName: string | null;
   phoneVerified?: boolean;
+  email?: string | null;
 }
 
 interface WalletInfo {
@@ -113,7 +115,12 @@ export default function Wallet() {
             </p>
           </div>
 
-          <h2>Monthly limit</h2>
+          <h2>Reminders</h2>
+      <div className="card">
+        <EmailReminders current={user.email ?? null} heading="Email" />
+      </div>
+
+      <h2>Monthly limit</h2>
           <div className="card">
             <div className="between">
               <span>{usd(info.limits.committedCents)} committed</span>

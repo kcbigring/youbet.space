@@ -4,6 +4,8 @@ export interface User {
   /// Phone proven via Identity Platform. Required to fund a wager once real
   /// money is on; irrelevant while playing with test funds.
   phoneVerified?: boolean;
+  /// Where reminders go. Absent means nothing reaches this person.
+  email?: string | null;
   handle?: string | null;
   phone?: string;
   walletAddress?: string | null;

@@ -153,6 +153,7 @@ router.get(
         phoneVerified: user.phoneVerified,
         displayName: user.displayName,
         handle: user.handle,
+        email: user.email,
         walletAddress: user.walletAddress,
         groups: user.memberships.map((m) => ({ id: m.group.id, name: m.group.name, role: m.role })),
       },
@@ -164,6 +165,10 @@ const profileSchema = z.object({
   displayName: z.string().trim().min(1).max(60).optional(),
   handle: z.string().trim().regex(/^[a-z0-9_]{3,20}$/i).optional(),
   walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  /// Where reminders go. The app sends no SMS and has no push, so this is the
+  /// only way anyone hears that their bond is about to be forfeited — and
+  /// clearing it is how they turn that off, which is why null is allowed.
+  email: z.string().trim().email().max(160).nullable().optional(),
 });
 
 router.patch(
@@ -171,8 +176,23 @@ router.patch(
   authenticate,
   asyncHandler(async (req: AuthedRequest, res) => {
     const body = parseBody(profileSchema, req);
+
+    if (body.email) {
+      const taken = await prisma.user.findUnique({ where: { email: body.email } });
+      if (taken && taken.id !== req.userId) throw conflict("That email is already on another account");
+    }
+
     const user = await prisma.user.update({ where: { id: req.userId }, data: body });
-    res.json({ ok: true, user: { id: user.id, displayName: user.displayName, handle: user.handle, walletAddress: user.walletAddress } });
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        displayName: user.displayName,
+        handle: user.handle,
+        email: user.email,
+        walletAddress: user.walletAddress,
+      },
+    });
   })
 );
 

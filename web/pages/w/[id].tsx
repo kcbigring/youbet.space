@@ -6,6 +6,7 @@ import type { Wager } from "../../lib/types";
 import { encodeFunctionData } from "viem";
 import { Layout, Banner, Avatar, Empty } from "../../components/Layout";
 import { ShareInvite } from "../../components/ShareInvite";
+import { EmailReminders } from "../../components/EmailReminders";
 import { Players } from "../../components/Players";
 import { ConnectWallet } from "../../components/ConnectWallet";
 import { TestMoney } from "../../components/TestMoney";
@@ -493,6 +494,20 @@ export default function WagerDetail() {
             heading="Invite more people"
           />
         </>
+      )}
+
+      {/* Asked for at the moment it starts mattering. Money is locked, a
+          deadline is running, and nothing on this device will say a word when
+          it gets close. */}
+      {wager.status === "LOCKED" && me?.state === "JOINED" && !user.email && (
+        <div style={{ marginTop: 20 }}>
+          <EmailReminders
+            compact
+            current={null}
+            heading="Nothing will remind you"
+            onSaved={() => load()}
+          />
+        </div>
       )}
 
       <h2>Trash talk</h2>

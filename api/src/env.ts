@@ -69,6 +69,11 @@ export const env = {
   /// Off for the test-token alpha; on before real money.
   requireVerifiedPhone: process.env.REQUIRE_VERIFIED_PHONE === "true",
 
+  // Email, via Resend. Without a key the notification job still runs and still
+  // records what it would have sent; it just reaches nobody.
+  resendApiKey: process.env.RESEND_API_KEY,
+  notifyFrom: process.env.NOTIFY_FROM || "youbet.space <notifications@youbet.space>",
+
   // SMS. Optional — invites are share links, so nothing depends on this.
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,

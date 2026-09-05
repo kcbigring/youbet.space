@@ -16,7 +16,10 @@ import { env } from "../env";
 
 export interface Channel {
   name: string;
-  send(to: { userId: string; email?: string | null }, message: { title: string; body: string }): Promise<boolean>;
+  send(
+    to: { userId: string; email?: string | null },
+    message: { title: string; body: string; wagerId?: string | null }
+  ): Promise<boolean>;
 }
 
 /// Development channel: prints instead of sending, so the job is testable with
@@ -29,9 +32,64 @@ const consoleChannel: Channel = {
   },
 };
 
+/// Email, via Resend.
+///
+/// Reaches everyone, needs no carrier registration, and does not care whether
+/// the app was added to a home screen. Someone with no address on file simply
+/// is not reachable this way — that is not a failure, so it is reported as
+/// "not delivered" rather than thrown, and the next channel gets a turn.
+const resendChannel: Channel = {
+  name: "resend",
+  async send(to, message) {
+    if (!env.resendApiKey || !to.email) return false;
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: env.notifyFrom,
+        to: [to.email],
+        subject: message.title,
+        text: `${message.body}\n\n${env.appUrl}${message.wagerId ? `/w/${message.wagerId}` : ""}`,
+        html: emailHtml(message),
+      }),
+    });
+
+    if (!response.ok) {
+      // Resend explains itself in the body; the status alone says nothing.
+      throw new Error(`resend ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    }
+    return true;
+  },
+};
+
+/// One column, one sentence, one link. A reminder that somebody owes an answer
+/// on a $10 bet does not need a layout, and anything more decorative reads as
+/// marketing — which is how it ends up filtered.
+function emailHtml({ title, body, wagerId }: { title: string; body: string; wagerId?: string | null }) {
+  const link = `${env.appUrl}${wagerId ? `/w/${wagerId}` : ""}`;
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#0b0d12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table role="presentation" width="100%" style="max-width:420px;margin:0 auto">
+    <tr><td style="padding-bottom:18px;color:#e6e8ee;font-size:17px;font-weight:700">youbet<span style="color:#4ade80">.space</span></td></tr>
+    <tr><td style="background:#151922;border:1px solid #232936;border-radius:14px;padding:22px">
+      <div style="color:#e6e8ee;font-size:18px;font-weight:700;margin-bottom:8px">${escapeHtml(title)}</div>
+      <div style="color:#98a2b3;font-size:15px;line-height:1.5">${escapeHtml(body)}</div>
+      <a href="${link}" style="display:inline-block;margin-top:18px;background:#4ade80;color:#0b0d12;text-decoration:none;font-weight:700;font-size:15px;padding:11px 18px;border-radius:10px">Open it</a>
+    </td></tr>
+    <tr><td style="padding-top:16px;color:#5b6478;font-size:12px">You are getting this because you have money on a bet. Turn these off in your wallet.</td></tr>
+  </table>
+</body></html>`;
+}
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 function channels(): Channel[] {
-  // Real channels slot in here as they are configured; the job does not change.
-  return [consoleChannel];
+  // Console last: it always succeeds, so anything after it would never run.
+  return [...(env.resendApiKey ? [resendChannel] : []), consoleChannel];
 }
 
 /// Sends everything recorded but not yet delivered. Marks `sentAt` only when a
@@ -54,7 +112,7 @@ export async function dispatchPending(limit = 200) {
       try {
         delivered = await channel.send(
           { userId: notification.userId, email: notification.user.email },
-          { title: notification.title, body: notification.body }
+          { title: notification.title, body: notification.body, wagerId: notification.wagerId }
         );
         if (delivered) break;
       } catch (error) {
