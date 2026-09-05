@@ -1,14 +1,30 @@
 # Heartbeat
 
-Time: 2026-08-23T16:30:00Z
+Updated: 2026-09-05T19:45:00Z
 
-Last commit: (local changes present)
+Last commit: 67d4c38 feat: groups that the escrow enforces, and phone verification that works (kcbigring, 79 minutes ago)
 
-Files changed: contracts/contracts/Wager.sol, contracts/contracts/WagerFactory.sol, api/src/index.ts, api/src/twilio.ts, web/pages/index.tsx, api/prisma/schema.prisma, .github/workflows/heartbeat.yml
+## Recent activity
 
-Current status: Blocked locally — `npm install` for `contracts/` fails with 403 on `@nomicfoundation/hardhat-toolbox`. Recent implemented work: owner/house split and bond redistribution in `Wager.sol`; `createWager(..., ownerSplitBps)` in `WagerFactory.sol`; `/invite` and `/verify` endpoints and Twilio helper; Invite UI added; Base configured as primary deployment target.
+- 67d4c38 feat: groups that the escrow enforces, and phone verification that works
+- 3a29760 feat: email reminders, and a schedule that fits the window
+- eec2e2b test: the ways a bet goes wrong, and let more than two people take one
+- 588311b test: run the whole product locally and click through it
+- be82445 fix: stop refusing to send from a wallet that is already connected
 
-Next steps:
-- Push branch to GitHub so the scheduled heartbeat workflow can start updating this file every 5 minutes.
-- Fix npm registry / CI to allow `npm install` in `contracts/` (CI run recommended).
-- Re-run `npx hardhat test` in CI and address any contract-level issues.
+## Files touched in the last commit
+
+- api/src/lib/standing.ts
+- api/src/routes/groups.ts
+- api/src/routes/wagers.ts
+- api/tests/phone-gate.test.ts
+- api/tests/standing.test.ts
+- e2e/harness.mjs
+- web/components/GroupOnChain.tsx
+- web/components/VerifyPhone.tsx
+- web/e2e/flow.spec.ts
+- web/lib/contracts.ts
+- web/lib/useConfig.ts
+- web/pages/groups/[id].tsx
+- web/pages/w/[id].tsx
+- web/pages/wallet.tsx
