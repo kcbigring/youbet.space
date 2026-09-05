@@ -186,6 +186,14 @@ button.small { padding: 8px 12px; font-size: 13px; }
 .side-option.selected { border-color: var(--accent); background: rgba(74, 222, 128, 0.08); }
 .side-option.won { border-color: var(--accent); }
 
+/* An option that exists but is not open yet. It has to stay legible — it is
+   there to show the choice is coming, and a button faded to nothing reads as
+   an option that does not exist. */
+.side-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .stat b { font-size: 20px; letter-spacing: -0.01em; }
 .stat span { font-size: 12px; color: var(--muted); }

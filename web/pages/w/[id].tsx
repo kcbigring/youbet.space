@@ -261,47 +261,49 @@ export default function WagerDetail() {
 
       {canResolve && (
         <>
-          <h2>{eventOver ? "How did it go?" : "Nothing to settle yet"}</h2>
-          <p className="small muted" style={{ marginTop: -4 }}>
-            {eventOver
-              ? `Say how it went. ${onchain?.attestationsRequired ?? 0} of ${onchain?.participants ?? 0} have to agree before the money moves.`
-              : `Nobody can say how it went until the outcome is due, ${timeUntil(wager.eventDeadline).replace(" left", " from now")}. Until then the only way to end it early is to hand it to them.`}
-          </p>
+          <h2>How did it go?</h2>
+          {eventOver && (
+            <p className="small muted" style={{ marginTop: -4 }}>
+              {onchain?.attestationsRequired ?? 0} of {onchain?.participants ?? 0} have to agree before
+              the money moves.
+            </p>
+          )}
           <div className="stack">
             {/* Two answers, not three. "I won" claims your own side; "I lost"
-                concedes, which is not the same as voting for the other side
+                concedes, which is not the same as attesting for the other side
                 and is strictly better for everyone — a wager nobody disputed
                 settles at once and returns every bond, where an attested one
-                confiscates the bond of anyone who never spoke up. Offering the
-                raw side labels made the losing player pick the worse of two
-                identical-looking options. */}
-            {eventOver && (
-              <button
-                className="side-option"
-                disabled={busy || wallet.busy}
-                onClick={() =>
-                  act(() =>
-                    onChain(wager.id, [bookCall("attest", [BigInt(wager.onchainId!), me?.side ?? 0])])
-                  )
-                }
-              >
-                <b>I won</b>
-                <div className="small muted" style={{ marginTop: 4 }}>
-                  &ldquo;{wager.sideLabels[me?.side ?? 0]}&rdquo; is what happened
-                </div>
-              </button>
-            )}
+                confiscates the bond of anyone who never spoke up.
+
+                Both stay on screen before the outcome is due, with the winning
+                claim disabled and saying when it opens. Hiding it left one
+                button on the page and made the app look like it had decided
+                the loss — which is exactly how it read. */}
             <button
-              className={eventOver ? "side-option" : "ghost block"}
+              className="side-option"
+              disabled={busy || wallet.busy || !eventOver}
+              onClick={() =>
+                act(() =>
+                  onChain(wager.id, [bookCall("attest", [BigInt(wager.onchainId!), me?.side ?? 0])])
+                )
+              }
+            >
+              <b>I won</b>
+              <div className="small muted" style={{ marginTop: 4 }}>
+                {eventOver
+                  ? `“${wager.sideLabels[me?.side ?? 0]}” is what happened`
+                  : `Opens ${timeUntil(wager.eventDeadline).replace(" left", " from now")}, when the outcome is due`}
+              </div>
+            </button>
+            <button
+              className="side-option"
               disabled={busy || wallet.busy}
               onClick={() => act(() => onChain(wager.id, [bookCall("concede", [BigInt(wager.onchainId!)])]))}
             >
               <b>I lost &mdash; pay them now</b>
-              {eventOver && (
-                <div className="small muted" style={{ marginTop: 4 }}>
-                  Settles immediately and everyone gets their {usd(wager.bondCents)} bond back
-                </div>
-              )}
+              <div className="small muted" style={{ marginTop: 4 }}>
+                Settles immediately and everyone gets their {usd(wager.bondCents)} bond back
+              </div>
             </button>
           </div>
           <p className="small muted">
