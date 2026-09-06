@@ -71,6 +71,13 @@ export const env = {
 
   // Email, via Resend. Without a key the notification job still runs and still
   // records what it would have sent; it just reaches nobody.
+  /// Whether a wager may be settled by an approved data source instead of by
+  /// the people in it. Off: no resolver is approved on any network, so an
+  /// oracle wager would sit waiting for a report that nothing can produce, and
+  /// the app would badge it "auto-resolved" while quietly relying on the
+  /// players anyway. Everything is attested by the players until this is on.
+  oracleResolution: process.env.ENABLE_ORACLE_RESOLUTION === "true",
+
   resendApiKey: process.env.RESEND_API_KEY,
   notifyFrom: process.env.NOTIFY_FROM || "youbet.space <notifications@youbet.space>",
 

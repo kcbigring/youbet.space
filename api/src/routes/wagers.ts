@@ -170,6 +170,14 @@ router.post(
     const windowHours = body.resolutionWindowHours ?? group?.resolutionWindowHours ?? 72;
     const resolutionDeadline = new Date(eventDeadline.getTime() + windowHours * HOUR);
 
+    // Nothing can report an outcome while no resolver is approved, so a wager
+    // marked for one would wait on a report that cannot arrive — and the app
+    // would call it auto-resolved while relying on the players regardless. The
+    // classification is still worth keeping as a label; the settlement method
+    // is not.
+    const resolutionMethod =
+      env.oracleResolution ? body.resolutionMethod : ("ATTESTATION" as const);
+
     const bondCents = body.bondCents ?? group?.defaultBondCents ?? 100;
     const thresholdBps = body.thresholdBps ?? group?.defaultThresholdBps ?? 5000;
 
@@ -193,7 +201,7 @@ router.post(
         stakeCents: body.stakeCents,
         bondCents,
         ownerSplitBps: body.ownerSplitBps ?? 0,
-        resolutionMethod: body.resolutionMethod,
+        resolutionMethod,
         oracleSource: body.oracleSource,
         thresholdBps,
         maxParticipants: body.maxParticipants,
@@ -235,7 +243,7 @@ router.post(
           eventDeadline: Math.floor(eventDeadline.getTime() / 1000),
           resolutionDeadline: Math.floor(resolutionDeadline.getTime() / 1000),
           maxParticipants: body.maxParticipants,
-          resolutionMethod: body.resolutionMethod === "ORACLE" ? 1 : 0,
+          resolutionMethod: resolutionMethod === "ORACLE" ? 1 : 0,
         },
       },
     });
