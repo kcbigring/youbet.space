@@ -10,7 +10,9 @@
     "status": "node scripts/status.js",
     "faucet": "node scripts/faucet.js",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network base_sepolia && node scripts/sync-env.js base_sepolia",
-    "deploy:mainnet": "hardhat run scripts/deploy.js --network base && node scripts/sync-env.js base"
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network base && node scripts/sync-env.js base",
+    "verify:mainnet": "node scripts/verify.js base",
+    "verify:sepolia": "node scripts/verify.js base_sepolia"
   },
   "devDependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",

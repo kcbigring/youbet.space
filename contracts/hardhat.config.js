@@ -48,10 +48,9 @@ module.exports = {
     },
   },
   etherscan: {
-    apiKey: {
-      base: process.env.BASESCAN_API_KEY || "",
-      baseSepolia: process.env.BASESCAN_API_KEY || "",
-    },
+    // One key, every chain: Etherscan's V2 API is multichain, so the per-network
+    // map this used to carry was two copies of the same value.
+    apiKey: process.env.BASESCAN_API_KEY || "",
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS === "true",
