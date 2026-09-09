@@ -46,6 +46,11 @@ export default function Create() {
   /// it fills, so this is decided before it goes on-chain and cannot change.
   const [seats, setSeats] = useState("2");
   const wallet = useWallet();
+  /// Checked here as well as on the server. The limit was only enforced at the
+  /// end, so someone could pick a stake, a deadline, a group and a roster, press
+  /// send, and be told the first number was never allowed.
+  const stakeCents = Math.round(parseFloat(stake || "0") * 100);
+  const overLimit = maxStakeCents !== null && stakeCents > maxStakeCents;
 
   useEffect(() => {
     if (!user) return;
@@ -96,7 +101,7 @@ export default function Create() {
         groupId: groupId || undefined,
         proposition,
         sideLabels: [sideA, sideB],
-        stakeCents: Math.round(parseFloat(stake) * 100),
+        stakeCents,
         creatorSide: side,
         eventDeadline: new Date(deadline).toISOString(),
         resolutionWindowHours: Number(voteWindow),
@@ -222,8 +227,15 @@ export default function Create() {
               onChange={(e) => setStake(e.target.value)}
             />
             {maxStakeCents !== null && (
-              <p className="small muted" style={{ margin: "6px 0 0" }}>
-                Up to {usd(maxStakeCents)} a bet at your standing.
+              <p className={overLimit ? "small neg" : "small muted"} style={{ margin: "6px 0 0" }}>
+                {overLimit ? (
+                  <>
+                    {usd(maxStakeCents)} is your limit for now. It goes up as you settle bets
+                    &mdash; there is a breakdown on your wallet.
+                  </>
+                ) : (
+                  <>Up to {usd(maxStakeCents)} a bet at your standing.</>
+                )}
               </p>
             )}
           </div>
@@ -310,7 +322,7 @@ export default function Create() {
             <button
               className="block"
               onClick={handleCreate}
-              disabled={busy || !proposition || !stake || !wallet.isConnected}
+              disabled={busy || !proposition || !stake || overLimit || !wallet.isConnected}
             >
               {busy ? "Sending…" : "Send challenge"}
             </button>

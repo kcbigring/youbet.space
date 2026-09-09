@@ -1,5 +1,6 @@
 import { env } from "../env";
 import type { Reputation } from "./reputation";
+import { formatUsd } from "./money";
 
 /// Standing earned inside a group, from the reputation the plan already
 /// describes (§7): record, settled challenges, and attestation rate.
@@ -108,6 +109,27 @@ function qualifies(tier: Tier, rep: Reputation): boolean {
 /// Highest tier the member currently clears. Standing can fall as well as rise:
 /// letting an attestation rate slip costs the tier it earned, which is the
 /// social pressure the plan asks for rather than a permanent badge.
+/// What it would take to raise this person's stake limit, in plain words.
+///
+/// "Settle a few more" is not something anyone can act on — it does not say how
+/// many, or that settling is only half of it.
+export function pathToNext(standing: Standing): string {
+  if (!standing.next || !standing.toNext) return "That is the highest limit.";
+
+  const parts: string[] = [];
+  if (standing.toNext.settled > 0) {
+    parts.push(
+      standing.toNext.settled === 1 ? "settle one more bet" : `settle ${standing.toNext.settled} more bets`
+    );
+  }
+  if (standing.toNext.attestation !== null) {
+    parts.push(`keep saying how they went ${standing.toNext.attestation}% of the time`);
+  }
+  if (!parts.length) return `Next settlement takes you to ${formatUsd(standing.next.maxStakeCents)}.`;
+
+  return `${parts.join(" and ")} to reach ${formatUsd(standing.next.maxStakeCents)}.`;
+}
+
 export function standingFor(rep: Reputation): Standing {
   let earned = TIERS[0];
   for (const tier of TIERS) {

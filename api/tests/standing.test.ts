@@ -1,4 +1,4 @@
-import { standingFor, TIERS } from "../src/lib/standing";
+import { pathToNext, standingFor, TIERS } from "../src/lib/standing";
 import type { Reputation } from "../src/lib/reputation";
 
 const rep = (over: Partial<Reputation> = {}): Reputation => ({
@@ -70,5 +70,33 @@ describe("standing", () => {
     const s = standingFor(rep({ wins: 25, losses: 5, attestationRate: 100 }));
     expect(s.next).toBeNull();
     expect(s.toNext).toBeNull();
+  });
+});
+
+// "Settle a few more and it goes up" is not something anyone can act on: it
+// does not say how many, and it does not mention that settling is only half of
+// what the next tier asks for.
+describe("what it takes to raise a limit", () => {
+  it("says how many bets, not 'a few'", () => {
+    const message = pathToNext(standingFor(rep()));
+    expect(message).toMatch(/settle 3 more bets/);
+    expect(message).toMatch(/\$25/);
+    expect(message).not.toMatch(/a few/);
+  });
+
+  it("mentions the attestation rate, which settling alone does not satisfy", () => {
+    expect(pathToNext(standingFor(rep({ wins: 3, attestationRate: 20 })))).toMatch(/80%/);
+  });
+
+  // Somebody who has settled plenty but answers late should not be told to go
+  // and settle more; that is not what is holding them.
+  it("drops the part already earned", () => {
+    const message = pathToNext(standingFor(rep({ wins: 12, attestationRate: 50 })));
+    expect(message).not.toMatch(/settle/);
+    expect(message).toMatch(/%/);
+  });
+
+  it("says so at the top", () => {
+    expect(pathToNext(standingFor(rep({ wins: 40, attestationRate: 100 })))).toMatch(/highest/i);
   });
 });

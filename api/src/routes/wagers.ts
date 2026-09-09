@@ -11,7 +11,7 @@ import { centsToUnits, formatUsd, unitsToCents } from "../lib/money";
 import { artifact, contractAt, getBook, hashTerms, readWagerParticipants, readWagerState } from "../lib/chain";
 import { ethers } from "ethers";
 import { monthlyVolumeCents, reputationFor } from "../lib/reputation";
-import { standingFor } from "../lib/standing";
+import { pathToNext, standingFor } from "../lib/standing";
 
 const router = Router();
 router.use(authenticate);
@@ -137,7 +137,7 @@ router.post(
       const personal = standing.limits.maxStakeCents < (group?.maxStakeCents ?? env.maxStakeCents);
       throw badRequest(
         personal
-          ? `Your limit is ${formatUsd(maxStake)} a wager right now. Settle a few more and it goes up.`
+          ? `Your limit is ${formatUsd(maxStake)} a wager right now — ${pathToNext(standing)}`
           : `Stake is above the ${formatUsd(maxStake)} limit per person`
       );
     }
@@ -563,7 +563,7 @@ router.post(
     const standing = standingFor(await reputationFor(userId));
     if (wager.stakeCents > standing.limits.maxStakeCents) {
       throw badRequest(
-        `This bet is above your ${formatUsd(standing.limits.maxStakeCents)} limit right now. Settle a few more and it goes up.`
+        `This bet is above your ${formatUsd(standing.limits.maxStakeCents)} limit right now — ${pathToNext(standing)}`
       );
     }
 
