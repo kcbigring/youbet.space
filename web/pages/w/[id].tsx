@@ -14,6 +14,7 @@ import { ConnectWallet } from "../../components/ConnectWallet";
 import { TestMoney } from "../../components/TestMoney";
 import { FoundingSlots } from "../../components/FoundingSlots";
 import { useWallet } from "../../lib/useWallet";
+import { usePlayMoney } from "../../lib/usePlayMoney";
 import { wagerBookAbi } from "../../lib/abi";
 import { publishWager } from "../../lib/publish";
 import { wagerBookAddress } from "../../lib/contracts";
@@ -39,6 +40,31 @@ interface Detail {
   claimableCents: number | null;
 }
 
+/// Turns what the chain says into what a person needs to know.
+///
+/// A batch that cannot succeed produces three errors in a row, none of which
+/// names the problem: the token reverts, the paymaster declines to sponsor an
+/// operation it can see will revert, and the wallet then reports that the
+/// account has no ETH to pay for it itself.
+function readable(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/insufficient balance/i.test(message)) {
+    return "You do not have enough play money for this. Get some above and try again.";
+  }
+  if (/already dripped/i.test(message)) return "You already topped up today.";
+  if (/already resolved/i.test(message)) return "You have already said how this one went.";
+  if (/not a group member/i.test(message)) {
+    return "The escrow does not have you on this group's roster yet. Ask whoever owns it to add you.";
+  }
+  if (/wager full/i.test(message)) return "Somebody took the last spot.";
+  if (/resolution window closed/i.test(message)) return "The window for saying how it went has closed.";
+  if (/event not over/i.test(message)) return "The outcome is not due yet.";
+  if (/user rejected|denied/i.test(message)) return "Cancelled in your wallet.";
+
+  return message || "That did not go through";
+}
+
 export default function WagerDetail() {
   const router = useRouter();
   const { id } = router.query;
@@ -56,6 +82,7 @@ export default function WagerDetail() {
   const [deleting, setDeleting] = useState(false);
   const wallet = useWallet();
   const config = useConfig();
+  const play = usePlayMoney(wallet.address);
 
   const load = useCallback(async () => {
     if (typeof id !== "string") return;
@@ -77,7 +104,7 @@ export default function WagerDetail() {
       await fn();
       await load();
     } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : "That did not go through");
+      setError(readable(err));
     } finally {
       setBusy(false);
     }
@@ -142,6 +169,9 @@ export default function WagerDetail() {
   const canJoin = wager.status === "OPEN" && me?.state !== "JOINED" && new Date(wager.fundingDeadline) > new Date();
   /// A bet with nobody opposite is not a bet yet, which is the one thing the
   /// page should be pushing on.
+  /// Stake and bond both move when a side is backed, so both have to be there.
+  const committed = wager.stakeCents + wager.bondCents;
+  const short = play.cents !== null && play.cents < committed;
   const needsOpponent = wager.status === "OPEN" && sideCount(joined, 1 - (me?.side ?? 0)) === 0;
   const canResolve = wager.status === "LOCKED" && me?.state === "JOINED" && !me.attestedAt;
   const canWithdraw = ["SETTLED", "REFUNDED", "CANCELLED"].includes(wager.status) && me?.state === "JOINED";
@@ -291,12 +321,25 @@ export default function WagerDetail() {
             {/* An invited friend arrives with nothing; this is where they get
                 something to bet with, and what being early is worth. */}
             <FoundingSlots compact />
-            <TestMoney />
+            <TestMoney onFunded={() => play.refetch()} />
+
+            {/* Said before the button, not after the wallet. Backing a side you
+                cannot cover reverts inside the token, the paymaster declines to
+                sponsor an operation it can see will revert, and the wallet then
+                reports that the account has no ETH — none of which mentions the
+                actual problem. */}
+            {short && (
+              <p className="small neg" style={{ margin: 0 }}>
+                You need {usd(committed)} to take a side and have {usd(play.cents!)}. Get play money
+                above first.
+              </p>
+            )}
+
             {wager.sideLabels.map((label, index) => (
               <button
                 key={index}
                 className="side-option"
-                disabled={busy || wallet.busy}
+                disabled={busy || wallet.busy || short}
                 onClick={() => act(() => join(wager.id, index))}
               >
                 Back: {label}
